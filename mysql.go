@@ -1,7 +1,6 @@
 package dtorm
 
 import (
-	"database/sql"
 	"fmt"
 	"time"
 
@@ -48,6 +47,14 @@ func (m *MySQLManager) IdentityString(f string) string {
 	return fmt.Sprintf("`%s`", f)
 }
 
+func (m *MySQLManager) TableCreate() string {
+	return "CREATE TABLE IF NOT EXISTS `%s` (%s);"
+}
+
+func (m *MySQLManager) IndexCreate() string {
+	return "CREATE INDEX `%s_%s_Idx` ON %s(`%s`);"
+
+}
 func (m *MySQLManager) TableDefinition(md Modeller) ([]string, bool) {
 	return nil, false
 }
@@ -64,11 +71,21 @@ func (m *MySQLManager) RefreshCommand(md Modeller) string {
 	return ""
 }
 
-func (m *MySQLManager) Connect() (*sql.DB, error) {
-	return nil, nil
-}
 func (m *MySQLManager) BuildQuery(where string, order string, limit string, offset string) string {
-	return ""
+	res := ""
+	if where != "" {
+		res += fmt.Sprintf(" WHERE %s", where)
+	}
+	if order != "" {
+		res += fmt.Sprintf(" ORDER BY %s", order)
+	}
+	if limit != "" {
+		res += fmt.Sprintf(" LIMIT %s", limit)
+	}
+	if offset != "" {
+		res += fmt.Sprintf(" OFFSET %s", offset)
+	}
+	return res
 }
 func (m *MySQLManager) TableTest(mdl Modeller) ([]field, string, bool) {
 	return nil, "", true

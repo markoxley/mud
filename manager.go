@@ -1,7 +1,6 @@
 package dtorm
 
 import (
-	"database/sql"
 	"fmt"
 )
 
@@ -17,13 +16,14 @@ type Manager interface {
 	UpdateCommand(m Modeller) string
 	DeleteCommand(m Modeller) string
 	RefreshCommand(m Modeller) string
-	Connect() (*sql.DB, error)
 	BuildQuery(where string, order string, limit string, offset string) string
 	TableTest(m Modeller) ([]field, string, bool)
 	TableExistsQuery(dbName, name string) string
 	MassDelete(m Modeller, c *Criteria) string
 	MassDisable(m Modeller, c *Criteria) string
 	Operators() []string
+	TableCreate() string
+	IndexCreate() string
 }
 
 func GetManager(config *Config) (Manager, error) {

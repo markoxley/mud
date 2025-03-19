@@ -4,6 +4,7 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
+	"iter"
 	"reflect"
 	"regexp"
 	"slices"
@@ -324,6 +325,146 @@ func (db *DB) populateModel(m Modeller, r *sql.Rows) ([]Modeller, bool) {
 	return res[:rowCount], ok
 }
 
+func (db *DB) populateSingle(m Modeller, r *sql.Rows) bool {
+	s := reflect.TypeOf(m)
+	ok := true
+
+	// Get the column count
+	cc, _ := r.Columns()
+
+	// Make them all uppercase
+	for i := range cc {
+		cc[i] = strings.ToUpper(cc[i])
+	}
+
+	// Get the fields of the model and build a map of them
+	//t := reflect.TypeOf(*m)
+	mdl := reflect.New(s).Interface().(Modeller)
+	flds, ok := db.tableDef[getTableName(mdl)]
+	if !ok {
+		return false
+	}
+	fMap := make(map[string]field, len(flds))
+	for _, f := range flds {
+		fMap[strings.ToUpper(f.name)] = f
+	}
+
+	cols := make([]*string, len(cc))
+	vls := make([]interface{}, len(cc))
+
+	v := reflect.New(s)
+
+	for i := range cols {
+		vls[i] = &cols[i]
+	}
+	r.Scan(vls...)
+
+	for i := 0; i < len(cc); i++ {
+		if cols[i] == nil {
+			continue
+		}
+		if cc[i] == "ID" {
+			tmpID := cols[i]
+			v.Elem().FieldByName("ID").Set(reflect.ValueOf(tmpID))
+		} else if cc[i] == "CREATEDATE" {
+			if cols[i] != nil {
+				if tm, ok := utils.SQLToTime(*cols[i]); ok {
+					tmpCreate := *tm
+					v.Elem().FieldByName("CreateDate").Set(reflect.ValueOf(tmpCreate))
+				}
+			}
+		} else if cc[i] == "LASTUPDATE" {
+			if cols[i] != nil {
+				if tm, ok := utils.SQLToTime(*cols[i]); ok {
+					tmpUpdate := *tm
+					v.Elem().FieldByName("LastUpdate").Set(reflect.ValueOf(tmpUpdate))
+				}
+			}
+		} else if cc[i] == "DELETEDATE" {
+			if cols[i] != nil {
+				if tm, ok := utils.SQLToTime(*cols[i]); ok {
+					tmpDeleted := tm
+					v.Elem().FieldByName("DeleteDate").Set(reflect.ValueOf(tmpDeleted))
+				}
+			}
+		} else if fld, ok := fMap[cc[i]]; ok {
+			switch fld.fType {
+			case tInt, tLong:
+				if fld.unsigned {
+					if val, err := strconv.ParseUint(*cols[i], 10, 64); err != nil {
+						if fld.allowNull {
+							v.Elem().FieldByName(fld.name).Set(reflect.ValueOf(val))
+						} else {
+							v.Elem().FieldByName(fld.name).SetUint(val)
+						}
+					}
+				} else {
+					if val, err := strconv.ParseInt(*cols[i], 10, 64); err == nil {
+						if fld.allowNull {
+							v.Elem().FieldByName(fld.name).Set(reflect.ValueOf(val))
+						} else {
+							v.Elem().FieldByName(fld.name).SetInt(val)
+						}
+					}
+				}
+			case tBool:
+				if val, err := strconv.ParseInt(*cols[i], 10, 64); err == nil {
+					if fld.allowNull {
+						v.Elem().FieldByName(fld.name).Elem().SetBool(val == 1)
+					} else {
+						v.Elem().FieldByName(fld.name).SetBool(val == 1)
+					}
+				}
+			case tDecimal, tFloat, tDouble:
+				if val, err := strconv.ParseFloat(*cols[i], 64); err == nil {
+					if fld.allowNull {
+						v.Elem().FieldByName(fld.name).Set(reflect.ValueOf(val))
+					} else {
+						v.Elem().FieldByName(fld.name).SetFloat(val)
+					}
+				}
+			case tDateTime:
+				if cols[i] != nil {
+					if val, ok := utils.SQLToTime(*cols[i]); ok {
+						if fld.allowNull {
+							v.Elem().FieldByName(fld.name).Set(reflect.ValueOf(val))
+						} else {
+							v.Elem().FieldByName(fld.name).Set(reflect.ValueOf(*val))
+						}
+					}
+				}
+			case tChar:
+				st := *cols[i]
+				strVal := st[:1]
+				if fld.allowNull {
+					v.Elem().FieldByName(fld.name).Set(reflect.ValueOf(&strVal))
+				} else {
+					v.Elem().FieldByName(fld.name).SetString(strVal)
+				}
+			case tString:
+				if fld.allowNull {
+					strVal := *cols[i]
+					v.Elem().FieldByName(fld.name).Set(reflect.ValueOf(&strVal))
+				} else {
+					v.Elem().FieldByName(fld.name).SetString(*cols[i])
+				}
+			case tUUID:
+				if fld.allowNull {
+					strVal := *cols[i]
+					v.Elem().FieldByName(fld.name).Set(reflect.ValueOf(&strVal))
+				} else {
+					v.Elem().FieldByName(fld.name).SetString(*cols[i])
+				}
+			}
+		}
+
+	}
+	newObj := v.Elem().Interface().(Modeller)
+	db.doRestore(newObj)
+	mdl = newObj
+	//	}
+	return ok
+}
 func (db *DB) doRestore(m Modeller) {
 	if r, ok := m.(Restorer); ok {
 		r.Restore(db.mgr)
@@ -491,6 +632,49 @@ func (db *DB) getCriteria(criteria []interface{}) (*Criteria, error) {
 	return &Criteria{}, nil
 }
 
+func (db *DB) Range(mdl Modeller, criteria ...interface{}) iter.Seq[Modeller] {
+	return func(yield func(Modeller) bool) {
+		c, err := db.getCriteria(criteria)
+		if err != nil {
+			return
+		}
+		t := reflect.TypeOf(mdl)
+		n := t.Name()
+		_, _, ok := db.mgr.TableTest(mdl)
+		if !ok {
+			return
+		}
+		s := fmt.Sprintf("select * from %s", db.mgr.IdentityString(n))
+		s += c.String(db.mgr)
+
+		var qtx *sql.Tx
+		if !db.cfg.DisabledTransactions {
+			qtx, err = db.beginTransaction(db.db)
+			if err != nil {
+				return
+			}
+			defer db.CommitTransaction(qtx)
+		}
+		var res *sql.Rows
+		if qtx != nil {
+			res, err = qtx.Query(s)
+		} else {
+			res, err = db.db.Query(s)
+		}
+		if err != nil {
+			return
+		}
+		defer res.Close()
+		for res.Next() {
+			r := reflect.New(reflect.TypeOf(mdl).Elem()).Interface().(Modeller)
+			db.populateSingle(r, res)
+			if !yield(r) {
+				return
+			}
+		}
+	}
+}
+
 // Fetch populates the slice with models from the database that match the criteria.
 // Returns an error if this fails
 // @param criteria
@@ -509,7 +693,7 @@ func (db *DB) Fetch(mdl Modeller, criteria ...interface{}) ([]Modeller, error) {
 		return nil, errors.New("failed table check")
 	}
 
-	s := fmt.Sprintf("select * from `%s`", n)
+	s := fmt.Sprintf("select * from ", db.mgr.IdentityString(n))
 	s += c.String(db.mgr)
 	res, ok := db.selectQuery(mdl, s)
 	if !ok {
@@ -522,22 +706,22 @@ func (db *DB) Fetch(mdl Modeller, criteria ...interface{}) ([]Modeller, error) {
 // @param criteria
 // @return *T
 // @return error
-func (db *DB) First(m Modeller, criteria ...interface{}) (Modeller, error) {
+func (db *DB) First(m Modeller, criteria ...interface{}) error {
 	c, err := db.getCriteria(criteria)
 	if err != nil {
-		return nil, err
+		return err
 	}
 	c.Limit = 1
 	c.Offset = 0
 	ml, err := db.Fetch(m, c)
 	if err != nil {
-		return nil, err
+		return err
 	}
-	if len(ml) > 0 {
-		return ml[0], nil
+	if len(ml) == 0 {
+		return NoResults("no results")
 	}
-
-	return nil, nil
+	reflect.ValueOf(m).Elem().Set(reflect.ValueOf(ml[0]).Elem())
+	return nil
 }
 
 // Count returns the number of rows in the database that match the criteria
@@ -618,4 +802,56 @@ func (db *DB) RemoveMany(m Modeller, c *Criteria) (int, bool) {
 	}
 	ok := db.executeQuery(s) != nil
 	return r, ok
+}
+
+func (db *DB) tableDefinition(m Modeller) ([]string, bool) {
+	sql := make([]string, 0, 3)
+
+	n := getTableName(m)
+	if _, ok := db.tableDef[n]; ok {
+		return nil, false
+	}
+
+	t := reflect.TypeOf(m)
+	var nm interface{}
+	if t.Kind() == reflect.Ptr {
+		nm = reflect.New(t.Elem()).Elem().Interface()
+	} else {
+		nm = reflect.New(t).Elem().Interface()
+	}
+	fs := getDefs(nm, true)
+
+	db.tableDef[n] = fs
+	if len(fs) == 0 {
+		return nil, false
+	}
+	flds := ""
+	keys := make([]string, 0, 5)
+	for _, f := range fs {
+		if flds != "" {
+			flds += ", "
+		}
+		flds += fmt.Sprintf("`%s` %s", f.name, pgFieldNames[f.fType])
+		if f.fType != tUUID && f.fType != tChar && f.size.size > 0 {
+			flds += fmt.Sprintf("(%s)", f.size.String())
+		}
+		if f.fType == tString && f.size.size == 0 {
+			flds += "(256)"
+		}
+		if f.unsigned {
+			flds += " UNSIGNED"
+		}
+		if !f.allowNull {
+			flds += " NOT NULL"
+		}
+		if f.key {
+			keys = append(keys, f.name)
+		}
+	}
+	sql = append(sql, fmt.Sprintf(db.mgr.TableCreate(), n, flds))
+	kn := strings.ReplaceAll(n, ".", "_")
+	for _, k := range keys {
+		sql = append(sql, fmt.Sprintf(db.mgr.IndexCreate(), kn, k, n, k))
+	}
+	return sql, true
 }

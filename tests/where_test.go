@@ -1,4 +1,4 @@
-package mxormtests
+package dtormtests
 
 import (
 	"fmt"
