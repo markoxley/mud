@@ -1,3 +1,6 @@
+// Copyright (c) 2025 DaggerTech. All rights reserved.
+// Use of this source code is governed by an MIT license that can be
+// found in the LICENSE file.
 // Package dtorm provides interfaces for database operations in the ORM.
 package dtorm
 
@@ -17,3 +20,4 @@ type Restorer interface {
 
 // Remover defines the interface for objects that can be removed from the database.
 type Remover interface{}
+

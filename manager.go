@@ -1,3 +1,6 @@
+// Copyright (c) 2025 DaggerTech. All rights reserved.
+// Use of this source code is governed by an MIT license that can be
+// found in the LICENSE file.
 // Package dtorm provides database management interfaces and implementations.
 package dtorm
 
@@ -58,3 +61,4 @@ func GetManager(config *Config) (Manager, error) {
 		return nil, fmt.Errorf("invalid database type: %s", config.Type)
 	}
 }
+

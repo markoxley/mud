@@ -1,3 +1,6 @@
+// Copyright (c) 2025 DaggerTech. All rights reserved.
+// Use of this source code is governed by an MIT license that can be
+// found in the LICENSE file.
 // Package utils provides utility functions for time conversion between SQL and Go
 package utils
 
@@ -103,3 +106,4 @@ func SQLToTime(st string) (*time.Time, bool) {
 	t := time.Date(y, time.Month(m), d, h, mn, s, ns, time.UTC)
 	return &t, true
 }
+

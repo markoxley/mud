@@ -1,3 +1,6 @@
+// Copyright (c) 2025 DaggerTech. All rights reserved.
+// Use of this source code is governed by an MIT license that can be
+// found in the LICENSE file.
 // Package clause This is a very basic, and yet versatile ORM package.
 // At present, this is only for postgres
 package where
@@ -539,3 +542,4 @@ func (c *Builder) OrNotBetween(field string, value1 interface{}, value2 interfac
 	c.children = append(c.children, newClause(conOr, field, opBetween, true, value1, value2))
 	return c
 }
+

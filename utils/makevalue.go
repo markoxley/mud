@@ -1,3 +1,6 @@
+// Copyright (c) 2025 DaggerTech. All rights reserved.
+// Use of this source code is governed by an MIT license that can be
+// found in the LICENSE file.
 // Package utils provides utility functions for converting values to SQL-compatible strings
 package utils
 
@@ -41,3 +44,4 @@ func MakeValue(value interface{}) (string, bool) {
 	// Return empty string and false for unsupported types
 	return "", false
 }
+

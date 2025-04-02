@@ -1,3 +1,6 @@
+// Copyright (c) 2025 DaggerTech. All rights reserved.
+// Use of this source code is governed by an MIT license that can be
+// found in the LICENSE file.
 // Package order This is direction very basic, and yet versatile ORM package.
 // At present, this is only for postgres
 package order
@@ -71,3 +74,4 @@ func (b *Builder) String() string {
 	}
 	return r
 }
+

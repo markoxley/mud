@@ -1,3 +1,7 @@
+// Copyright (c) 2025 DaggerTech. All rights reserved.
+// Use of this source code is governed by an MIT license that can be
+// found in the LICENSE file.
+
 // Package dtorm provides a database ORM (Object-Relational Mapping) implementation
 // with support for SQLite, MySQL, and SQL Server databases.
 package dtorm

@@ -1,3 +1,6 @@
+// Copyright (c) 2025 DaggerTech. All rights reserved.
+// Use of this source code is governed by an MIT license that can be
+// found in the LICENSE file.
 package dtormtests
 
 import (
@@ -623,3 +626,4 @@ func TestWhereAndIn2(t *testing.T) {
 		t.Errorf("expecting '%s' got '%s'", expected[1], result)
 	}
 }
+

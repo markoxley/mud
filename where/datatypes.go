@@ -1,3 +1,6 @@
+// Copyright (c) 2025 DaggerTech. All rights reserved.
+// Use of this source code is governed by an MIT license that can be
+// found in the LICENSE file.
 // Package where provides functionality for building SQL WHERE clauses
 package where
 
@@ -36,3 +39,4 @@ const (
 	dLong             // Long integer types
 	dText             // Text/string type
 )
+

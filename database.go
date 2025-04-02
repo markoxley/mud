@@ -1,3 +1,6 @@
+// Copyright (c) 2025 DaggerTech. All rights reserved.
+// Use of this source code is governed by an MIT license that can be
+// found in the LICENSE file.
 package dtorm
 
 import (
@@ -1024,3 +1027,4 @@ func (db *DB) Refresh(m Modeller) error {
 	}
 	return db.First(m, where.Equal("ID", m.GetID()))
 }
+

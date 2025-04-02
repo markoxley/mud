@@ -1,3 +1,6 @@
+// Copyright (c) 2025 DaggerTech. All rights reserved.
+// Use of this source code is governed by an MIT license that can be
+// found in the LICENSE file.
 // Package dtorm provides a simple ORM implementation for MS SQL Server databases.
 package dtorm
 
@@ -109,3 +112,4 @@ func (m *MSSQLManager) TableCreate() string {
 func (m *MSSQLManager) IndexCreate() string {
 	return "CREATE INDEX [%s_%s_Idx] ON [%s]([%s]);"
 }
+
