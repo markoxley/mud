@@ -1,51 +1,106 @@
+// Package dtorm provides a simple ORM implementation for SQLite databases.
 package dtorm
 
 import "fmt"
 
+// SqliteManager implements the database management interface for SQLite.
+// It handles SQLite specific query generation and database operations.
 type SqliteManager struct {
-	// Needs to implement Manager
+	db *DB // Reference to the database connection
 }
 
+// SetDB assigns a database connection to the manager.
+func (m *SqliteManager) SetDB(db *DB) {
+	m.db = db
+}
+
+// GetDB returns the current database connection.
+func (m *SqliteManager) GetDB() *DB {
+	return m.db
+}
+
+// ConnectionString generates a SQLite connection string from the provided configuration.
+// Returns an error if the configuration is nil or missing required fields.
+// Note that SQLite only requires the database path, unlike other SQL databases.
 func (m *SqliteManager) ConnectionString(cfg *Config) (string, error) {
 	if cfg == nil {
 		return "", fmt.Errorf("no config provided")
-
 	}
 	if cfg.Database == "" {
 		return "", fmt.Errorf("invalid config provided")
-
 	}
 	return fmt.Sprintf("sqlite3://%s", cfg.Database), nil
 }
 
-func (m *SqliteManager) WhereString(c *Criteria) (string, error) {
-	return "", nil
+// LimitString generates the SQLite specific LIMIT clause for result limiting.
+// Returns an empty string if criteria is nil or limit is less than 1.
+func (m *SqliteManager) LimitString(c *Criteria) string {
+	if c == nil || c.Limit < 1 {
+		return ""
+	}
+	return fmt.Sprintf(" LIMIT %d", c.Limit)
 }
-func (m *SqliteManager) OrderString(c *Criteria) (string, error) {
-	return "", nil
+
+// OffsetString generates the SQLite specific OFFSET clause.
+// Returns an empty string if criteria is nil or offset is less than 1.
+func (m *SqliteManager) OffsetString(c *Criteria) string {
+	if c == nil || c.Offset < 1 {
+		return ""
+	}
+	return fmt.Sprintf(" OFFSET %d", c.Offset)
 }
-func (m *SqliteManager) LimitString(c *Criteria) (string, error) {
-	return "", nil
-}
-func (m *SqliteManager) OffsetString(c *Criteria) (string, error) {
-	return "", nil
-}
+
+// IdentityString wraps a field name in double quotes for SQLite identifier escaping.
 func (m *SqliteManager) IdentityString(f string) string {
 	return fmt.Sprintf("\"%s\"", f)
 }
 
-func (m *SqliteManager) TableDefinition(md Modeller) ([]string, bool) {
-	return nil, false
+// TableCreate returns the SQLite table creation query template.
+// The template includes IF NOT EXISTS to prevent duplicate table creation errors.
+func (m *SqliteManager) TableCreate() string {
+	return "CREATE TABLE IF NOT EXISTS \"%s\" (%s);"
 }
-func (m *SqliteManager) InsertCommand(md Modeller) string {
-	return ""
+
+// IndexCreate returns the SQLite index creation query template.
+func (m *SqliteManager) IndexCreate() string {
+	return "CREATE INDEX \"%s_%s_Idx\" ON %s(\"%s\");"
 }
-func (m *SqliteManager) UpdateCommand(md Modeller) string {
-	return ""
+
+// BuildQuery combines WHERE, ORDER BY, LIMIT, and OFFSET clauses into a complete query string.
+func (m *SqliteManager) BuildQuery(where string, order string, limit string, offset string) string {
+	res := ""
+	if where != "" {
+		res += fmt.Sprintf(" WHERE %s", where)
+	}
+	if order != "" {
+		res += fmt.Sprintf(" ORDER BY %s", order)
+	}
+	return res + limit + offset
 }
-func (m *SqliteManager) DeleteCommand(md Modeller) string {
-	return ""
+
+// TableExistsQuery generates a query to check if a table exists in the database.
+// Uses the sqlite_master system table to check for table existence.
+func (m *SqliteManager) TableExistsQuery(name string) string {
+	return fmt.Sprintf("SELECT \"name\" FROM sqlite_master WHERE type='table' AND name='%s'", name)
 }
-func (m *SqliteManager) RefreshCommand(md Modeller) string {
-	return ""
+
+// Operators returns a list of SQLite compatible operator formats for query building.
+// These formats include comparison, LIKE, IN, BETWEEN, and NULL check operators.
+func (m *SqliteManager) Operators() []string {
+	return []string{
+		"\"%s\" = %s",           // Equal
+		"\"%s\" > %s",           // Greater than
+		"\"%s\" < %s",           // Less than
+		"\"%s\" LIKE %s",        // Pattern matching
+		"\"%s\" IN (%s)",        // In list
+		"\"%s\" BETWEEN %s AND %s", // Between range
+		"\"%s\" IS NULL",        // Is null check
+		"\"%s\" <> %s",          // Not equal
+		"\"%s\" <= %s",          // Less than or equal
+		"\"%s\" >= %s",          // Greater than or equal
+		"\"%s\" NOT LIKE %s",    // Not like pattern
+		"\"%s\" NOT IN (%s)",    // Not in list
+		"\"%s\" NOT BETWEEN %s AND %s", // Not between range
+		"\"%s\" IS NOT NULL",    // Is not null check
+	}
 }

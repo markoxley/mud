@@ -1,19 +1,30 @@
+// Package dtorm provides a database ORM (Object-Relational Mapping) implementation
+// with support for SQLite, MySQL, and SQL Server databases.
 package dtorm
 
 import "fmt"
 
-// Criteria is used to safely build your criteria for searches
+// Criteria is used to safely build search criteria for database queries.
+// It provides a structured way to define WHERE, ORDER BY, LIMIT, and OFFSET conditions.
 type Criteria struct {
-	Where      interface{}
-	Order      interface{}
-	Limit      int
-	Offset     int
+	// Where defines the WHERE condition for the query
+	Where interface{}
+	// Order defines the ORDER BY condition for the query
+	Order interface{}
+	// Limit specifies the maximum number of rows to return
+	Limit int
+	// Offset specifies the number of rows to skip
+	Offset int
+	// IncDeleted indicates whether to include soft-deleted records
 	IncDeleted bool
 }
 
-// WhereString returns the where condition in SQL format
-// @receiver c
-// @return string
+// WhereString returns the WHERE condition in SQL format.
+// It converts the criteria's Where condition into a properly formatted SQL WHERE clause.
+// Parameters:
+//   mgr: The database manager used to format the WHERE condition
+// Returns:
+//   A string containing the SQL WHERE clause
 func (c Criteria) WhereString(mgr Manager) string {
 	if c.Where == nil {
 		return ""
@@ -42,9 +53,12 @@ func (c Criteria) WhereString(mgr Manager) string {
 	return where
 }
 
-// OrderString returns the orderering in SQL format
-// @receiver c
-// @return string
+// OrderString returns the ORDER BY condition in SQL format.
+// It converts the criteria's Order condition into a properly formatted SQL ORDER BY clause.
+// Parameters:
+//   mgr: The database manager used to format the ORDER BY condition
+// Returns:
+//   A string containing the SQL ORDER BY clause
 func (c Criteria) OrderString(mgr Manager) string {
 	if c.Order == nil {
 		return ""

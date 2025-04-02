@@ -1,41 +1,53 @@
+// Package dtorm provides a simple ORM implementation for MySQL databases.
 package dtorm
 
 import (
 	"fmt"
-	"time"
-
-	"github.com/markoxley/dtorm/utils"
 )
 
+// MySQLManager implements the database management interface for MySQL.
+// It handles MySQL specific query generation and database operations.
 type MySQLManager struct {
-	// Needs to implement Manager
+	// dbName is the name of the connected database.
+	dbName string
+	// db is a reference to the database connection.
+	db *DB
 }
 
+// SetDB assigns a database connection to the manager.
+func (m *MySQLManager) SetDB(db *DB) {
+	m.db = db
+}
+
+// GetDB returns the current database connection.
+func (m *MySQLManager) GetDB() *DB {
+	return m.db
+}
+
+// ConnectionString generates a MySQL connection string from the provided configuration.
+// Returns an error if the configuration is nil or missing required fields.
 func (m *MySQLManager) ConnectionString(cfg *Config) (string, error) {
 	if cfg == nil {
 		return "", fmt.Errorf("no config provided")
-
 	}
 	if cfg.User == "" || cfg.Password == "" || cfg.Host == "" || cfg.Database == "" {
 		return "", fmt.Errorf("invalid config provided")
-
 	}
+	m.dbName = cfg.Database
 	return fmt.Sprintf("mysql://%s:%s@%s/%s", cfg.User, cfg.Password, cfg.Host, cfg.Database), nil
 }
 
-//	func (m *MySQLManager) WhereString(c *Criteria) (string, error) {
-//		return "", nil
-//	}
-//
-//	func (m *MySQLManager) OrderString(c *Criteria) (string, error) {
-//		return "", nil
-//	}
+// LimitString generates the MySQL specific LIMIT clause for result limiting.
+// Returns an empty string if criteria is nil or limit is less than 1.
 func (m *MySQLManager) LimitString(c *Criteria) string {
 	if c == nil || c.Limit < 1 {
 		return ""
 	}
 	return fmt.Sprintf(" LIMIT %d", c.Limit)
 }
+
+// OffsetString generates the MySQL specific OFFSET clause.
+// Returns an empty string if criteria is nil or offset is less than 1.
 func (m *MySQLManager) OffsetString(c *Criteria) string {
 	if c == nil || c.Offset < 1 {
 		return ""
@@ -43,34 +55,23 @@ func (m *MySQLManager) OffsetString(c *Criteria) string {
 	return fmt.Sprintf(" OFFSET %d", c.Offset)
 }
 
+// IdentityString wraps a field name in backticks for MySQL identifier escaping.
 func (m *MySQLManager) IdentityString(f string) string {
 	return fmt.Sprintf("`%s`", f)
 }
 
+// TableCreate returns the MySQL table creation query template.
+// The template includes IF NOT EXISTS to prevent duplicate table creation errors.
 func (m *MySQLManager) TableCreate() string {
 	return "CREATE TABLE IF NOT EXISTS `%s` (%s);"
 }
 
+// IndexCreate returns the MySQL index creation query template.
 func (m *MySQLManager) IndexCreate() string {
 	return "CREATE INDEX `%s_%s_Idx` ON %s(`%s`);"
-
-}
-func (m *MySQLManager) TableDefinition(md Modeller) ([]string, bool) {
-	return nil, false
-}
-func (m *MySQLManager) InsertCommand(md Modeller) string {
-	return ""
-}
-func (m *MySQLManager) UpdateCommand(md Modeller) string {
-	return ""
-}
-func (m *MySQLManager) DeleteCommand(md Modeller) string {
-	return ""
-}
-func (m *MySQLManager) RefreshCommand(md Modeller) string {
-	return ""
 }
 
+// BuildQuery combines WHERE, ORDER BY, LIMIT, and OFFSET clauses into a complete query string.
 func (m *MySQLManager) BuildQuery(where string, order string, limit string, offset string) string {
 	res := ""
 	if where != "" {
@@ -79,69 +80,31 @@ func (m *MySQLManager) BuildQuery(where string, order string, limit string, offs
 	if order != "" {
 		res += fmt.Sprintf(" ORDER BY %s", order)
 	}
-	if limit != "" {
-		res += fmt.Sprintf(" LIMIT %s", limit)
-	}
-	if offset != "" {
-		res += fmt.Sprintf(" OFFSET %s", offset)
-	}
-	return res
-}
-func (m *MySQLManager) TableTest(mdl Modeller) ([]field, string, bool) {
-	return nil, "", true
+	return res + limit + offset
 }
 
-func (m *MySQLManager) TableExistsQuery(dbName, name string) string {
-	return fmt.Sprintf("SHOW TABLES WHERE Tables_in_%s = '%s'", dbName, name)
+// TableExistsQuery generates a query to check if a table exists in the database.
+func (m *MySQLManager) TableExistsQuery(name string) string {
+	return fmt.Sprintf("SHOW TABLES WHERE Tables_in_%s = '%s'", m.dbName, name)
 }
 
-func (m *MySQLManager) MassDelete(mdl Modeller, c *Criteria) string {
-	name := getTableName(mdl)
-	s := fmt.Sprintf("DELETE FROM %s", m.IdentityString(name))
-	whereAdded := false
-	if c != nil && c.Where != "" {
-		s += fmt.Sprintf(" WHERE %s", c.WhereString(m))
-		whereAdded = true
-	}
-	if whereAdded {
-		s += " AND `DeleteDate` IS NULL"
-	} else {
-		s += " WHERE `DeleteDate` IS NULL"
-	}
-	return s
-}
-func (m *MySQLManager) MassDisable(mdl Modeller, c *Criteria) string {
-	tm := time.Now()
-	name := getTableName(mdl)
-	s := fmt.Sprintf("UPDATE %s SET `DeleteDate` = '%v'", m.IdentityString(name), utils.TimeToSQL(tm))
-	whereAdded := false
-	if c != nil && c.Where != "" {
-		s += fmt.Sprintf(" WHERE %s", c.WhereString(m))
-		whereAdded = true
-	}
-	if whereAdded {
-		s += " AND `DeleteDate` IS NULL"
-	} else {
-		s += " WHERE `DeleteDate` IS NULL"
-	}
-	return s
-}
-
+// Operators returns a list of MySQL compatible operator formats for query building.
+// These formats include comparison, LIKE, IN, BETWEEN, and NULL check operators.
 func (m *MySQLManager) Operators() []string {
 	return []string{
-		"`%s` = %s",
-		"`%s` > %s",
-		"`%s` < %s",
-		"`%s` LIKE %s",
-		"`%s` IN (%s)",
-		"`%s` BETWEEN %s AND %s",
-		"`%s` IS NULL",
-		"`%s` <> %s",
-		"`%s` <= %s",
-		"`%s` >= %s",
-		"`%s` NOT LIKE %s",
-		"`%s` NOT IN (%s)",
-		"`%s` NOT BETWEEN %s AND %s",
-		"`%s` IS NOT NULL",
+		"`%s` = %s",           // Equal
+		"`%s` > %s",           // Greater than
+		"`%s` < %s",           // Less than
+		"`%s` LIKE %s",        // Pattern matching
+		"`%s` IN (%s)",        // In list
+		"`%s` BETWEEN %s AND %s", // Between range
+		"`%s` IS NULL",        // Is null check
+		"`%s` <> %s",          // Not equal
+		"`%s` <= %s",          // Less than or equal
+		"`%s` >= %s",          // Greater than or equal
+		"`%s` NOT LIKE %s",    // Not like pattern
+		"`%s` NOT IN (%s)",    // Not in list
+		"`%s` NOT BETWEEN %s AND %s", // Not between range
+		"`%s` IS NOT NULL",    // Is not null check
 	}
 }
