@@ -30,10 +30,9 @@ import (
 
 // Define your model
 type User struct {
-    ID        string `dtorm:"id,pk"`
+    dtorm.Model
     Username  string `dtorm:"username"`
     Email     string `dtorm:"email"`
-    CreatedAt time.Time `dtorm:"created_at"`
 }
 
 func main() {
@@ -46,7 +45,7 @@ func main() {
         Username: "user",
         Password: "password",
     }
-    
+
     db, err := dtorm.Connect(config)
     if err != nil {
         panic(err)
@@ -58,7 +57,7 @@ func main() {
         Username: "johndoe",
         Email:    "john@example.com",
     }
-    
+
     err = db.Create(user)
     if err != nil {
         panic(err)

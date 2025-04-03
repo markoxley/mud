@@ -26,9 +26,13 @@ func TimeToSQL(t time.Time) string {
 	mn = t.Minute()
 	s = t.Second()
 	ns = t.Nanosecond()
+	nss := strconv.FormatInt(int64(ns), 10)
+	if len(nss) > 3 {
+		nss = nss[:3]
+	}
 
 	// Format the time components into SQL string
-	return fmt.Sprintf("%04d-%02d-%02d %02d:%02d:%02d.%d", y, m, d, h, mn, s, ns)
+	return fmt.Sprintf("%04d-%02d-%02d %02d:%02d:%02d.%s", y, m, d, h, mn, s, nss)
 }
 
 // SQLToTime converts a SQL time string to a Go time.Time object
@@ -106,4 +110,3 @@ func SQLToTime(st string) (*time.Time, bool) {
 	t := time.Date(y, time.Month(m), d, h, mn, s, ns, time.UTC)
 	return &t, true
 }
-

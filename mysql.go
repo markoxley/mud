@@ -78,10 +78,10 @@ func (m *MySQLManager) IndexCreate() string {
 func (m *MySQLManager) BuildQuery(where string, order string, limit string, offset string) string {
 	res := ""
 	if where != "" {
-		res += fmt.Sprintf(" WHERE %s", where)
+		res += fmt.Sprintf(" %s", where)
 	}
 	if order != "" {
-		res += fmt.Sprintf(" ORDER BY %s", order)
+		res += fmt.Sprintf(" %s", order)
 	}
 	return res + limit + offset
 }
@@ -95,20 +95,19 @@ func (m *MySQLManager) TableExistsQuery(name string) string {
 // These formats include comparison, LIKE, IN, BETWEEN, and NULL check operators.
 func (m *MySQLManager) Operators() []string {
 	return []string{
-		"`%s` = %s",           // Equal
-		"`%s` > %s",           // Greater than
-		"`%s` < %s",           // Less than
-		"`%s` LIKE %s",        // Pattern matching
-		"`%s` IN (%s)",        // In list
-		"`%s` BETWEEN %s AND %s", // Between range
-		"`%s` IS NULL",        // Is null check
-		"`%s` <> %s",          // Not equal
-		"`%s` <= %s",          // Less than or equal
-		"`%s` >= %s",          // Greater than or equal
-		"`%s` NOT LIKE %s",    // Not like pattern
-		"`%s` NOT IN (%s)",    // Not in list
+		"`%s` = %s",                  // Equal
+		"`%s` > %s",                  // Greater than
+		"`%s` < %s",                  // Less than
+		"`%s` LIKE %s",               // Pattern matching
+		"`%s` IN (%s)",               // In list
+		"`%s` BETWEEN %s AND %s",     // Between range
+		"`%s` IS NULL",               // Is null check
+		"`%s` <> %s",                 // Not equal
+		"`%s` <= %s",                 // Less than or equal
+		"`%s` >= %s",                 // Greater than or equal
+		"`%s` NOT LIKE %s",           // Not like pattern
+		"`%s` NOT IN (%s)",           // Not in list
 		"`%s` NOT BETWEEN %s AND %s", // Not between range
-		"`%s` IS NOT NULL",    // Is not null check
+		"`%s` IS NOT NULL",           // Is not null check
 	}
 }
-

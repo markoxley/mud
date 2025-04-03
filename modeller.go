@@ -29,7 +29,7 @@ type Modeller interface {
 	IsDeleted() bool
 
 	// Disable marks the model as deleted (soft deletion).
-	Disable()
+	// Disable()
 }
 
 // getDefs extracts field definitions from a struct using reflection.
@@ -42,7 +42,7 @@ type Modeller interface {
 // Returns a slice of field definitions containing metadata about each field.
 func getDefs(t interface{}, first bool) []field {
 	res := make([]field, 0, 10)
-	
+
 	// Add standard model fields if this is the top-level struct
 	if first {
 		res = append(res, field{
@@ -89,14 +89,14 @@ func getDefs(t interface{}, first bool) []field {
 				res = append(res, subf...)
 			}
 		} else {
-			// Process mxorm tags for field configuration
-			if tg, ok := st.Tag.Lookup("mxorm"); ok {
+			// Process dtorm tags for field configuration
+			if tg, ok := st.Tag.Lookup("dtorm"); ok {
 				nm := st.Name
-				szMj := 0  // Major size (e.g., varchar length)
-				szMn := 0  // Minor size (e.g., decimal places)
-				id := false // Is identity field
-				key := false // Is key field
-				uns := false // Is unsigned
+				szMj := 0      // Major size (e.g., varchar length)
+				szMn := 0      // Minor size (e.g., decimal places)
+				id := false    // Is identity field
+				key := false   // Is key field
+				uns := false   // Is unsigned
 				fld := tString // Default field type
 
 				// Find matching field type from reflection Kind
@@ -156,4 +156,3 @@ func getDefs(t interface{}, first bool) []field {
 	}
 	return res
 }
-

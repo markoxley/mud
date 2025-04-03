@@ -17,18 +17,21 @@ type ErrNoResults struct {
 // NoResults creates a new ErrNoResults error with the specified message.
 // This function is used to wrap errors when a database query returns no results.
 // Parameters:
-//   msg: The error message to include in the error
+//
+//	msg: The error message to include in the error
+//
 // Returns:
-//   A new ErrNoResults error
+//
+//	A new ErrNoResults error
 func NoResults(msg string) ErrNoResults {
-	return ErrNoResults{Err: fmt.Errorf(msg)}
+	return ErrNoResults{Err: fmt.Errorf("%s", msg)}
 }
 
 // Error returns the error message for ErrNoResults.
 // This method implements the error interface for ErrNoResults.
 // Returns:
-//   The error message as a string
+//
+//	The error message as a string
 func (e ErrNoResults) Error() string {
 	return e.Err.Error()
 }
-

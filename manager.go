@@ -48,17 +48,27 @@ type Manager interface {
 
 // GetManager creates and returns a database-specific Manager implementation based on the configuration.
 // Supported database types are: "sqlite", "mysql", and "sqlserver".
-// Returns an error if an unsupported database type is specified.
+// Returns an error if an unsupported database type is specified or if config is nil.
 func GetManager(config *Config) (Manager, error) {
+	if config == nil {
+		return nil, fmt.Errorf("config cannot be nil")
+	}
 	switch config.Type {
-	case "sqlite":
+	case "sqlite", "sqlite3":
 		return &SqliteManager{}, nil
-	case "mysql":
+	case "mysql", "mariadb":
 		return &MySQLManager{}, nil
-	case "sqlserver":
+	case "sqlserver", "mssql":
 		return &MSSQLManager{}, nil
 	default:
 		return nil, fmt.Errorf("invalid database type: %s", config.Type)
 	}
 }
 
+// GetTypeName returns the type name of the manager implementation
+func GetTypeName(m Manager) string {
+	if m == nil {
+		return ""
+	}
+	return fmt.Sprintf("%T", m)
+}

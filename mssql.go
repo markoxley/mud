@@ -35,7 +35,7 @@ func (m *MSSQLManager) ConnectionString(cfg *Config) (string, error) {
 		return "", fmt.Errorf("invalid config provided")
 	}
 	m.dbName = cfg.Database
-	return fmt.Sprintf("sqlserver://%s:%s@%s/%s", cfg.User, cfg.Password, cfg.Host, cfg.Database), nil
+	return fmt.Sprintf("sqlserver://%s:%s@%s?database=%s", cfg.User, cfg.Password, cfg.Host, cfg.Database), nil
 }
 
 // LimitString generates the SQL Server specific FETCH NEXT clause for result limiting.
@@ -44,10 +44,14 @@ func (m *MSSQLManager) LimitString(c *Criteria) string {
 	if c == nil || c.Limit < 1 {
 		return ""
 	}
-	if c.Offset < 1 {
-		return fmt.Sprint(" OFFSET 0 ROWS FETCH NEXT %d ROWS ONLY", c.Limit)
+	res := ""
+	if c.Order == nil {
+		res = fmt.Sprintf(" ORDER BY [ID] ")
 	}
-	return fmt.Sprint(" FETCH NEXT %d ROWS ONLY", c.Limit)
+	if c.Offset < 1 {
+		return fmt.Sprintf("%s OFFSET 0 ROWS FETCH NEXT %d ROWS ONLY", res, c.Limit)
+	}
+	return fmt.Sprintf("%s OFFSET %d ROWS FETCH NEXT %d ROWS ONLY", res, c.Offset, c.Limit)
 }
 
 // OffsetString generates the SQL Server specific OFFSET clause.
@@ -56,7 +60,11 @@ func (m *MSSQLManager) OffsetString(c *Criteria) string {
 	if c == nil || c.Offset < 1 {
 		return ""
 	}
-	return fmt.Sprint(" OFFSET %d ROWS", c.Offset)
+	res := ""
+	if c.Order == nil {
+		res = fmt.Sprintf(" ORDER BY [ID] ")
+	}
+	return fmt.Sprintf("%s OFFSET %d ROWS", res, c.Offset)
 }
 
 // IdentityString wraps a field name in square brackets for SQL Server identifier escaping.
@@ -68,10 +76,10 @@ func (m *MSSQLManager) IdentityString(f string) string {
 func (m *MSSQLManager) BuildQuery(where string, order string, limit string, offset string) string {
 	res := ""
 	if where != "" {
-		res += fmt.Sprintf(" WHERE %s", where)
+		res += fmt.Sprintf(" %s", where)
 	}
 	if order != "" {
-		res += fmt.Sprintf(" ORDER BY %s", order)
+		res += fmt.Sprintf(" %s", order)
 	}
 	return res + offset + limit
 }
@@ -85,31 +93,30 @@ func (m *MSSQLManager) TableExistsQuery(name string) string {
 // These formats include comparison, LIKE, IN, BETWEEN, and NULL check operators.
 func (m *MSSQLManager) Operators() []string {
 	return []string{
-		"[%s] = %s",           // Equal
-		"[%s] > %s",           // Greater than
-		"[%s] < %s",           // Less than
-		"[%s] LIKE %s",        // Pattern matching
-		"[%s] IN (%s)",        // In list
-		"[%s] BETWEEN %s AND %s", // Between range
-		"[%s] IS NULL",        // Is null check
-		"[%s] <> %s",          // Not equal
-		"[%s] <= %s",          // Less than or equal
-		"[%s] >= %s",          // Greater than or equal
-		"[%s] NOT LIKE %s",    // Not like pattern
-		"[%s] NOT IN (%s)",    // Not in list
+		"[%s] = %s",                  // Equal
+		"[%s] > %s",                  // Greater than
+		"[%s] < %s",                  // Less than
+		"[%s] LIKE %s",               // Pattern matching
+		"[%s] IN (%s)",               // In list
+		"[%s] BETWEEN %s AND %s",     // Between range
+		"[%s] IS NULL",               // Is null check
+		"[%s] <> %s",                 // Not equal
+		"[%s] <= %s",                 // Less than or equal
+		"[%s] >= %s",                 // Greater than or equal
+		"[%s] NOT LIKE %s",           // Not like pattern
+		"[%s] NOT IN (%s)",           // Not in list
 		"[%s] NOT BETWEEN %s AND %s", // Not between range
-		"[%s] IS NOT NULL",    // Is not null check
+		"[%s] IS NOT NULL",           // Is not null check
 	}
 }
 
 // TableCreate returns the SQL Server table creation query template.
 // The template includes a check to prevent creating duplicate tables.
 func (m *MSSQLManager) TableCreate() string {
-	return "IF OBJECT_ID(N'dbo.[%[1]s]', N'U') IS NULL BEGIN CREATE TABLE dbo.[%[1]s] (%[2]s); END;"
+	return "IF OBJECT_ID(N'dbo.%[1]s', N'U') IS NULL BEGIN CREATE TABLE dbo.[%[1]s] (%[2]s); END;"
 }
 
 // IndexCreate returns the SQL Server index creation query template.
 func (m *MSSQLManager) IndexCreate() string {
 	return "CREATE INDEX [%s_%s_Idx] ON [%s]([%s]);"
 }
-

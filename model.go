@@ -16,7 +16,7 @@ import (
 // updates, and soft deletion of records.
 type Model struct {
 	// Unique identifier for the record
-	ID         *string
+	ID *string
 	// Timestamp when the record was created
 	CreateDate time.Time
 	// Timestamp of the last update
@@ -24,7 +24,7 @@ type Model struct {
 	// Timestamp when the record was soft deleted (nil if active)
 	DeleteDate *time.Time
 	// Optional custom table name override
-	tableName  *string
+	tableName *string
 }
 
 // CreateModel initializes a new Model instance with current timestamps.
@@ -64,13 +64,12 @@ func (m *Model) Disable() {
 	m.DeleteDate = utils.Ptr(time.Now())
 }
 
-// getTableName determines the database table name for a model.
+// GetTableName determines the database table name for a model.
 // If the model is a pointer, it dereferences it to get the actual type name.
 // The table name is derived from the struct type name.
-func getTableName(m Modeller) string {
+func GetTableName(m Modeller) string {
 	if reflect.TypeOf(m).Kind() == reflect.Pointer {
 		return reflect.Indirect(reflect.ValueOf(m).Elem()).Type().Name()
 	}
 	return reflect.ValueOf(m).Type().Name()
 }
-

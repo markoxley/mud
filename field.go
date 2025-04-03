@@ -94,7 +94,7 @@ type field struct {
 	// fType is the type of the field (int, string, etc.)
 	fType fieldType
 	// size contains the size and decimal places for numeric types
-	size fieldSize
+	size FieldSize
 	// identity indicates if this field is an auto-incrementing primary key
 	identity bool
 	// key indicates if this field is part of a primary key
@@ -108,25 +108,27 @@ type field struct {
 // newField creates a new field definition with the specified properties.
 // It is used internally by the ORM to define database schema.
 // Parameters:
-//   nm: Field name
-//   tp: Field type
-//   sz: Field size (for numeric types)
-//   dec: Decimal places (for numeric types)
-//   id: Whether this is an identity field
-//   ky: Whether this is a key field
-//   us: Whether this is an unsigned numeric field
-//   nl: Whether NULL values are allowed
+//
+//	nm: Field name
+//	tp: Field type
+//	sz: Field size (for numeric types)
+//	dec: Decimal places (for numeric types)
+//	id: Whether this is an identity field
+//	ky: Whether this is a key field
+//	us: Whether this is an unsigned numeric field
+//	nl: Whether NULL values are allowed
+//
 // Returns:
-//   A new field definition
+//
+//	A new field definition
 func newField(nm string, tp fieldType, sz, dec int, id, ky, us bool, nl bool) field {
 	return field{
 		name:      nm,
 		fType:     tp,
-		size:      newSize(sz, dec),
+		size:      NewSize(sz, dec),
 		identity:  id,
 		key:       ky,
 		unsigned:  us,
 		allowNull: nl,
 	}
 }
-

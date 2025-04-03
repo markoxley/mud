@@ -7,26 +7,26 @@ package dtorm
 
 import "fmt"
 
-// fieldSize represents the size and precision of a database field.
+// FieldSize represents the size and precision of a database field.
 // It is used to store the maximum length and decimal places for numeric types.
-type fieldSize struct {
-	// size represents the maximum length of the field
-	size int
-	// decimal represents the number of decimal places for numeric types
-	decimal int
+type FieldSize struct {
+	// Size represents the maximum length of the field
+	Size int
+	// Decimal represents the number of decimal places for numeric types
+	Decimal int
 }
 
-// newSize creates a new fieldSize with the specified size and decimal places.
+// NewSize creates a new FieldSize with the specified size and decimal places.
 // This function is used to define the size constraints for database fields.
 // Parameters:
 //   sz: The maximum length of the field
 //   dec: The number of decimal places (for numeric types)
 // Returns:
-//   A new fieldSize instance
-func newSize(sz, dec int) fieldSize {
-	return fieldSize{
-		size:    sz,
-		decimal: dec,
+//   A new FieldSize instance
+func NewSize(sz, dec int) FieldSize {
+	return FieldSize{
+		Size:    sz,
+		Decimal: dec,
 	}
 }
 
@@ -36,10 +36,9 @@ func newSize(sz, dec int) fieldSize {
 // This method is used for generating SQL schema definitions.
 // Returns:
 //   A string representation of the field size
-func (s fieldSize) String() string {
-	if s.decimal > 0 {
-		return fmt.Sprintf("%d,%d", s.size, s.decimal)
+func (s FieldSize) String() string {
+	if s.Decimal > 0 {
+		return fmt.Sprintf("%d,%d", s.Size, s.Decimal)
 	}
-	return fmt.Sprintf("%d", s.size)
+	return fmt.Sprintf("%d", s.Size)
 }
-

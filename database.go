@@ -8,6 +8,7 @@ import (
 	"errors"
 	"fmt"
 	"iter"
+	"log"
 	"reflect"
 	"regexp"
 	"slices"
@@ -15,6 +16,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/markoxley/dtorm/order"
 	"github.com/markoxley/dtorm/utils"
 	"github.com/markoxley/dtorm/where"
 	uuid "github.com/satori/go.uuid"
@@ -199,7 +201,7 @@ func (db *DB) populateModel(m Modeller, r *sql.Rows) ([]Modeller, bool) {
 	// Get the fields of the model and build a map of them
 	//t := reflect.TypeOf(*m)
 	mdl := reflect.New(s).Interface().(Modeller)
-	flds, ok := db.tableDef[getTableName(mdl)]
+	flds, ok := db.tableDef[GetTableName(mdl)]
 	if !ok {
 		return nil, false
 	}
@@ -345,7 +347,7 @@ func (db *DB) populateSingle(m Modeller, r *sql.Rows) bool {
 	// Get the fields of the model and build a map of them
 	//t := reflect.TypeOf(*m)
 	mdl := reflect.New(s).Interface().(Modeller)
-	flds, ok := db.tableDef[getTableName(mdl)]
+	flds, ok := db.tableDef[GetTableName(mdl)]
 	if !ok {
 		return false
 	}
@@ -621,6 +623,14 @@ func (db *DB) getCriteria(criteria []interface{}) (*Criteria, error) {
 			return c, nil
 		} else if c, ok := cr.(Criteria); ok {
 			return &c, nil
+		} else if c, ok := cr.(*where.Builder); ok {
+			return &Criteria{Where: c}, nil
+		} else if c, ok := cr.(where.Builder); ok {
+			return &Criteria{Where: &c}, nil
+		} else if c, ok := cr.(*order.Builder); ok {
+			return &Criteria{Order: c}, nil
+		} else if c, ok := cr.(order.Builder); ok {
+			return &Criteria{Order: &c}, nil
 		} else if c, ok := cr.(string); ok {
 			var re = regexp.MustCompile(`^\s*[0-9A-F]{8}-[0-9A-F]{4}-[0-9A-F]{4}-[0-9A-F]{4}-[0-9A-F]{12}\s*$`)
 			if len(re.FindStringIndex(c)) > 0 {
@@ -645,7 +655,8 @@ func (db *DB) Range(mdl Modeller, criteria ...interface{}) iter.Seq[Modeller] {
 		}
 		t := reflect.TypeOf(mdl)
 		n := t.Name()
-		if !db.tableExists(getTableName(mdl)) {
+		_, _, err = db.tableTest(mdl)
+		if err != nil {
 			return
 		}
 		s := fmt.Sprintf("select * from %s", db.mgr.IdentityString(n))
@@ -692,8 +703,9 @@ func (db *DB) Fetch(mdl Modeller, criteria ...interface{}) ([]Modeller, error) {
 
 	t := reflect.TypeOf(mdl)
 	n := t.Name()
-	if !db.tableExists(getTableName(mdl)) {
-		return nil, errors.New("failed table check")
+	_, _, err = db.tableTest(mdl)
+	if err != nil {
+		return nil, err
 	}
 
 	s := fmt.Sprintf("SELECT * FROM %s", db.mgr.IdentityString(n))
@@ -709,22 +721,21 @@ func (db *DB) Fetch(mdl Modeller, criteria ...interface{}) ([]Modeller, error) {
 // @param criteria
 // @return *T
 // @return error
-func (db *DB) First(m Modeller, criteria ...interface{}) error {
+func (db *DB) First(m Modeller, criteria ...interface{}) (Modeller, error) {
 	c, err := db.getCriteria(criteria)
 	if err != nil {
-		return err
+		return nil, err
 	}
 	c.Limit = 1
 	c.Offset = 0
 	ml, err := db.Fetch(m, c)
 	if err != nil {
-		return err
+		return nil, err
 	}
 	if len(ml) == 0 {
-		return NoResults("no results")
+		return nil, NoResults("no results")
 	}
-	reflect.ValueOf(m).Elem().Set(reflect.ValueOf(ml[0]).Elem())
-	return nil
+	return ml[0], nil
 }
 
 // Count returns the number of rows in the database that match the criteria
@@ -735,9 +746,10 @@ func (db *DB) Count(m Modeller, criteria ...interface{}) int {
 	if err != nil {
 		return -1
 	}
-	t := getTableName(m)
-	if !db.tableExists(t) {
-		return 0
+	t := GetTableName(m)
+	_, _, err = db.tableTest(m)
+	if err != nil {
+		return -1
 	}
 	s := fmt.Sprintf("Select Count(*) from %s", db.mgr.IdentityString(t))
 	if c != nil {
@@ -755,11 +767,8 @@ func (db *DB) Count(m Modeller, criteria ...interface{}) int {
 }
 
 func (db *DB) insertCommand(m Modeller) (string, error) {
-	t := reflect.TypeOf(m)
-	n := t.Name()
-	if !db.tableExists(getTableName(m)) {
-		return "", errors.New("failed table check")
-	}
+	//t := reflect.TypeOf(m)
+	//n := getTableName(m)
 	flds, n, err := db.tableTest(m)
 	if err != nil {
 		return "", err
@@ -769,13 +778,13 @@ func (db *DB) insertCommand(m Modeller) (string, error) {
 	fds := "ID, CreateDate, LastUpdate"
 	now := time.Now()
 	db.updateModel(m, uid.String(), now, now, nil)
-	q := fmt.Sprintf("'%s', '%s', '%s'", uid, now, now)
-	v := reflect.ValueOf(m).Elem()
+	q := fmt.Sprintf("'%s', '%s', '%s'", uid, utils.TimeToSQL(now), utils.TimeToSQL(now))
+	v := reflect.ValueOf(m)
 	for _, f := range flds {
 		if f.name == "ID" || f.name == "CreateDate" || f.name == "LastUpdate" || f.name == "DeleteDate" {
 			continue
 		}
-		vi := v.FieldByName(f.name)
+		vi := v.Elem().FieldByName(f.name)
 
 		if f.allowNull {
 			if vi.IsNil() {
@@ -792,7 +801,7 @@ func (db *DB) insertCommand(m Modeller) (string, error) {
 		}
 	}
 
-	def := fmt.Sprintf("INSERT INTO %s (%s) VALUES(%s)", n, fds, q)
+	def := fmt.Sprintf("INSERT INTO %s (%s) VALUES(%s)", db.mgr.IdentityString(n), fds, q)
 	return def, nil
 }
 
@@ -841,7 +850,7 @@ func (db *DB) updateLastUpdate(m Modeller, date time.Time) {
 	v.Elem().FieldByName("LastUpdate").Set(dateValue)
 }
 func (db *DB) tableTest(m Modeller) ([]field, string, error) {
-	n := getTableName(m)
+	n := GetTableName(m)
 	sql, reqd := db.tableDefinition(m)
 	if reqd {
 		te := db.tableExists(n)
@@ -871,37 +880,37 @@ func (db *DB) tableTest(m Modeller) ([]field, string, error) {
 // an update or an insert command
 // @param m
 // @return bool
-func (db *DB) Save(m Modeller) bool {
+func (db *DB) Save(m Modeller) error {
 	if u, ok := m.(Updater); ok {
 		cmd, err := u.Update(db.mgr)
 		if err != nil {
-			return false
+			return err
 		}
-		return db.executeQuery(cmd) != nil
+		return db.executeQuery(cmd)
 	}
 	if m.IsNew() {
 		cmd, err := db.insertCommand(m)
 		if err != nil {
-			return false
+			return err
 		}
-		return db.executeQuery(cmd) != nil
+		return db.executeQuery(cmd)
 	}
 	updCmd, err := db.updateCommand(m)
 	if err != nil {
-		return false
+		return err
 	}
-	return db.executeQuery(updCmd) != nil
+	return db.executeQuery(updCmd)
 }
 
 // Remove removes the passed model from the database
 // @param m
 // @return bool
-func (db *DB) Remove(m Modeller) bool {
+func (db *DB) Remove(m Modeller) error {
 	if m.GetID() == nil {
-		return true
+		return nil
 	}
 	c := &Criteria{
-		Where: where.Equal("ID", m.GetID()),
+		Where: where.Equal("ID", *m.GetID()),
 	}
 	var s string
 	if db.cfg.Deletable {
@@ -909,13 +918,14 @@ func (db *DB) Remove(m Modeller) bool {
 	} else {
 		s = db.massDisable(m, c)
 	}
-	return db.executeQuery(s) != nil
+	return db.executeQuery(s)
 }
 
 func (db *DB) massDelete(m Modeller, c *Criteria) string {
-	name := getTableName(m)
+	name := GetTableName(m)
 	s := fmt.Sprintf("DELETE FROM %s", db.mgr.IdentityString(name))
 	whereAdded := false
+
 	if c != nil && c.Where != "" {
 		s += fmt.Sprintf(" WHERE %s", c.WhereString(db.mgr))
 		whereAdded = true
@@ -930,13 +940,17 @@ func (db *DB) massDelete(m Modeller, c *Criteria) string {
 
 func (db *DB) massDisable(m Modeller, c *Criteria) string {
 	tm := time.Now()
-	deleteDate := db.mgr.IdentityString("[DeleteDate]")
-	name := getTableName(m)
+	deleteDate := db.mgr.IdentityString("DeleteDate")
+	name := GetTableName(m)
 	s := fmt.Sprintf("UPDATE %s SET %s = '%v'", db.mgr.IdentityString(name), deleteDate, utils.TimeToSQL(tm))
+	log.Println(c.WhereString(db.mgr))
 	whereAdded := false
 	if c != nil && c.Where != "" {
-		s += fmt.Sprintf(" WHERE %s", c.WhereString(db.mgr))
-		whereAdded = true
+		trimmed := strings.TrimSpace(c.WhereString(db.mgr))
+		if trimmed != "" {
+			s += fmt.Sprintf(" %s", trimmed)
+			whereAdded = true
+		}
 	}
 	if whereAdded {
 		s += fmt.Sprintf(" AND %s IS NULL", deleteDate)
@@ -950,14 +964,14 @@ func (db *DB) massDisable(m Modeller, c *Criteria) string {
 // @param c
 // @return int
 // @return bool
-func (db *DB) RemoveMany(m Modeller, c *Criteria) (int, bool) {
-	t := getTableName(m)
+func (db *DB) RemoveMany(m Modeller, c *Criteria) (int, error) {
+	t := GetTableName(m)
 	if !db.tableExists(t) {
-		return 0, true
+		return 0, nil
 	}
 	r := db.Count(m, c)
 	if r == 0 {
-		return 0, true
+		return 0, nil
 	}
 	s := ""
 	if db.cfg.Deletable {
@@ -965,14 +979,14 @@ func (db *DB) RemoveMany(m Modeller, c *Criteria) (int, bool) {
 	} else {
 		s = db.massDisable(m, c)
 	}
-	ok := db.executeQuery(s) != nil
-	return r, ok
+	err := db.executeQuery(s)
+	return r, err
 }
 
 func (db *DB) tableDefinition(m Modeller) ([]string, bool) {
 	sql := make([]string, 0, 3)
 
-	n := getTableName(m)
+	n := GetTableName(m)
 	if _, ok := db.tableDef[n]; ok {
 		return nil, false
 	}
@@ -984,36 +998,36 @@ func (db *DB) tableDefinition(m Modeller) ([]string, bool) {
 	} else {
 		nm = reflect.New(t).Elem().Interface()
 	}
-	fs := getDefs(nm, true)
+	flds := getDefs(nm, true)
 
-	db.tableDef[n] = fs
-	if len(fs) == 0 {
+	db.tableDef[n] = flds
+	if len(flds) == 0 {
 		return nil, false
 	}
-	flds := ""
+	fldsStr := ""
 	keys := make([]string, 0, 5)
-	for _, f := range fs {
-		if flds != "" {
-			flds += ", "
+	for _, f := range flds {
+		if fldsStr != "" {
+			fldsStr += ", "
 		}
-		flds += fmt.Sprintf("`%s` %s", f.name, pgFieldNames[f.fType])
-		if f.fType != tUUID && f.fType != tChar && f.size.size > 0 {
-			flds += fmt.Sprintf("(%s)", f.size.String())
+		fldsStr += fmt.Sprintf("%s %s", db.mgr.IdentityString(f.name), pgFieldNames[f.fType])
+		if f.fType != tUUID && f.fType != tChar && f.size.Size > 0 {
+			fldsStr += fmt.Sprintf("(%d)", f.size.Size)
 		}
-		if f.fType == tString && f.size.size == 0 {
-			flds += "(256)"
+		if f.fType == tString && f.size.Size == 0 {
+			fldsStr += "(256)"
 		}
 		if f.unsigned {
-			flds += " UNSIGNED"
+			fldsStr += " UNSIGNED"
 		}
 		if !f.allowNull {
-			flds += " NOT NULL"
+			fldsStr += " NOT NULL"
 		}
 		if f.key {
 			keys = append(keys, f.name)
 		}
 	}
-	sql = append(sql, fmt.Sprintf(db.mgr.TableCreate(), n, flds))
+	sql = append(sql, fmt.Sprintf(db.mgr.TableCreate(), n, fldsStr))
 	kn := strings.ReplaceAll(n, ".", "_")
 	for _, k := range keys {
 		sql = append(sql, fmt.Sprintf(db.mgr.IndexCreate(), kn, k, n, k))
@@ -1025,6 +1039,30 @@ func (db *DB) Refresh(m Modeller) error {
 	if m.GetID() == nil {
 		return errors.New("no id")
 	}
-	return db.First(m, where.Equal("ID", m.GetID()))
+	m, err := db.First(m, where.Equal("ID", m.GetID()))
+	return err
 }
 
+func Fetch[T Modeller](db *DB, criteria ...interface{}) ([]*T, error) {
+	m := new(T)
+	ms, err := db.Fetch(*m, criteria...)
+	if err != nil {
+		return nil, err
+	}
+	res := make([]*T, 0, len(ms))
+	for _, m := range ms {
+		res = append(res, utils.Ptr(m.(T)))
+	}
+	return res, nil
+}
+
+func First[T Modeller](db *DB, criteria ...interface{}) (*T, error) {
+	r, err := Fetch[T](db, criteria...)
+	if err != nil {
+		return nil, err
+	}
+	if len(r) == 0 {
+		return nil, NoResults("no results")
+	}
+	return r[0], err
+}

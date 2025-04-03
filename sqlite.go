@@ -32,7 +32,7 @@ func (m *SqliteManager) ConnectionString(cfg *Config) (string, error) {
 	if cfg.Database == "" {
 		return "", fmt.Errorf("invalid config provided")
 	}
-	return fmt.Sprintf("sqlite3://%s", cfg.Database), nil
+	return cfg.Database, nil
 }
 
 // LimitString generates the SQLite specific LIMIT clause for result limiting.
@@ -73,10 +73,10 @@ func (m *SqliteManager) IndexCreate() string {
 func (m *SqliteManager) BuildQuery(where string, order string, limit string, offset string) string {
 	res := ""
 	if where != "" {
-		res += fmt.Sprintf(" WHERE %s", where)
+		res += fmt.Sprintf(" %s", where)
 	}
 	if order != "" {
-		res += fmt.Sprintf(" ORDER BY %s", order)
+		res += fmt.Sprintf(" %s", order)
 	}
 	return res + limit + offset
 }
@@ -91,20 +91,19 @@ func (m *SqliteManager) TableExistsQuery(name string) string {
 // These formats include comparison, LIKE, IN, BETWEEN, and NULL check operators.
 func (m *SqliteManager) Operators() []string {
 	return []string{
-		"\"%s\" = %s",           // Equal
-		"\"%s\" > %s",           // Greater than
-		"\"%s\" < %s",           // Less than
-		"\"%s\" LIKE %s",        // Pattern matching
-		"\"%s\" IN (%s)",        // In list
-		"\"%s\" BETWEEN %s AND %s", // Between range
-		"\"%s\" IS NULL",        // Is null check
-		"\"%s\" <> %s",          // Not equal
-		"\"%s\" <= %s",          // Less than or equal
-		"\"%s\" >= %s",          // Greater than or equal
-		"\"%s\" NOT LIKE %s",    // Not like pattern
-		"\"%s\" NOT IN (%s)",    // Not in list
+		"\"%s\" = %s",                  // Equal
+		"\"%s\" > %s",                  // Greater than
+		"\"%s\" < %s",                  // Less than
+		"\"%s\" LIKE %s",               // Pattern matching
+		"\"%s\" IN (%s)",               // In list
+		"\"%s\" BETWEEN %s AND %s",     // Between range
+		"\"%s\" IS NULL",               // Is null check
+		"\"%s\" <> %s",                 // Not equal
+		"\"%s\" <= %s",                 // Less than or equal
+		"\"%s\" >= %s",                 // Greater than or equal
+		"\"%s\" NOT LIKE %s",           // Not like pattern
+		"\"%s\" NOT IN (%s)",           // Not in list
 		"\"%s\" NOT BETWEEN %s AND %s", // Not between range
-		"\"%s\" IS NOT NULL",    // Is not null check
+		"\"%s\" IS NOT NULL",           // Is not null check
 	}
 }
-
