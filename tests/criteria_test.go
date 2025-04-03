@@ -27,6 +27,7 @@
 package tests
 
 import (
+	"fmt"
 	"testing"
 
 	"github.com/markoxley/dtorm"
@@ -73,14 +74,14 @@ func (m *mockManager) LimitString(c *dtorm.Criteria) string {
 	if c == nil || c.Limit < 1 {
 		return ""
 	}
-	return "LIMIT"
+	return fmt.Sprintf(" LIMIT %d", c.Limit)
 }
 
 func (m *mockManager) OffsetString(c *dtorm.Criteria) string {
 	if c == nil || c.Offset < 1 {
 		return ""
 	}
-	return "OFFSET"
+	return fmt.Sprintf(" OFFSET %d", c.Offset)
 }
 
 func (m *mockManager) IdentityString(f string) string {
@@ -90,16 +91,16 @@ func (m *mockManager) IdentityString(f string) string {
 func (m *mockManager) BuildQuery(where, order, limit, offset string) string {
 	result := ""
 	if where != "" {
-		result += " " + where
+		result += where
 	}
 	if order != "" {
-		result += " " + order
+		result += order
 	}
 	if limit != "" {
-		result += " " + limit
+		result += limit
 	}
 	if offset != "" {
-		result += " " + offset
+		result += offset
 	}
 	return result
 }
@@ -120,14 +121,14 @@ func TestCriteriaWhereString(t *testing.T) {
 	mgr := &mockManager{}
 
 	tests := []struct {
-		name       string
-		criteria   dtorm.Criteria
-		wantWhere  string
+		name      string
+		criteria  dtorm.Criteria
+		wantWhere string
 	}{
 		{
 			name: "nil where",
 			criteria: dtorm.Criteria{
-				Where: nil,
+				Where:      nil,
 				IncDeleted: false,
 			},
 			wantWhere: "WHERE DeleteDate IS NULL",
@@ -135,7 +136,7 @@ func TestCriteriaWhereString(t *testing.T) {
 		{
 			name: "string where",
 			criteria: dtorm.Criteria{
-				Where: "name = 'test'",
+				Where:      "name = 'test'",
 				IncDeleted: false,
 			},
 			wantWhere: " WHERE name = 'test' AND DeleteDate IS NULL",
@@ -143,7 +144,7 @@ func TestCriteriaWhereString(t *testing.T) {
 		{
 			name: "where builder pointer",
 			criteria: dtorm.Criteria{
-				Where: where.Equal("name", "test"),
+				Where:      where.Equal("name", "test"),
 				IncDeleted: false,
 			},
 			wantWhere: " WHERE name = 'test' AND DeleteDate IS NULL",
@@ -151,7 +152,7 @@ func TestCriteriaWhereString(t *testing.T) {
 		{
 			name: "include deleted",
 			criteria: dtorm.Criteria{
-				Where: where.Equal("name", "test"),
+				Where:      where.Equal("name", "test"),
 				IncDeleted: true,
 			},
 			wantWhere: " WHERE name = 'test'",
@@ -162,7 +163,7 @@ func TestCriteriaWhereString(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			got := tt.criteria.WhereString(mgr)
 			if got != tt.wantWhere {
-				t.Errorf("Criteria.WhereString() = %v, want %v", got, tt.wantWhere)
+				t.Errorf("Criteria.WhereString() = [%v], want [%v]", got, tt.wantWhere)
 			}
 		})
 	}
@@ -180,9 +181,9 @@ func TestCriteriaOrderString(t *testing.T) {
 	mgr := &mockManager{}
 
 	tests := []struct {
-		name       string
-		criteria   dtorm.Criteria
-		wantOrder  string
+		name      string
+		criteria  dtorm.Criteria
+		wantOrder string
 	}{
 		{
 			name: "nil order",
@@ -211,7 +212,7 @@ func TestCriteriaOrderString(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			got := tt.criteria.OrderString(mgr)
 			if got != tt.wantOrder {
-				t.Errorf("Criteria.OrderString() = %v, want %v", got, tt.wantOrder)
+				t.Errorf("Criteria.OrderString() = [%v], want [%v]", got, tt.wantOrder)
 			}
 		})
 	}
@@ -221,45 +222,45 @@ func TestCriteriaLimitOffset(t *testing.T) {
 	mgr := &mockManager{}
 
 	tests := []struct {
-		name        string
-		criteria    dtorm.Criteria
-		wantLimit   string
-		wantOffset  string
+		name       string
+		criteria   dtorm.Criteria
+		wantLimit  string
+		wantOffset string
 	}{
 		{
 			name: "no limit or offset",
 			criteria: dtorm.Criteria{
-				Limit: 0,
+				Limit:  0,
 				Offset: 0,
 			},
-			wantLimit: "",
+			wantLimit:  "",
 			wantOffset: "",
 		},
 		{
 			name: "with limit",
 			criteria: dtorm.Criteria{
-				Limit: 10,
+				Limit:  10,
 				Offset: 0,
 			},
-			wantLimit: " LIMIT 10",
+			wantLimit:  " LIMIT 10",
 			wantOffset: "",
 		},
 		{
 			name: "with offset",
 			criteria: dtorm.Criteria{
-				Limit: 0,
+				Limit:  0,
 				Offset: 5,
 			},
-			wantLimit: "",
+			wantLimit:  "",
 			wantOffset: " OFFSET 5",
 		},
 		{
 			name: "with both",
 			criteria: dtorm.Criteria{
-				Limit: 10,
+				Limit:  10,
 				Offset: 5,
 			},
-			wantLimit: " LIMIT 10",
+			wantLimit:  " LIMIT 10",
 			wantOffset: " OFFSET 5",
 		},
 	}
@@ -290,10 +291,10 @@ func TestCriteriaString(t *testing.T) {
 		{
 			name: "complete query",
 			criteria: dtorm.Criteria{
-				Where: where.Equal("name", "test"),
-				Order: "name ASC",
-				Limit: 10,
-				Offset: 5,
+				Where:      where.Equal("name", "test"),
+				Order:      "name ASC",
+				Limit:      10,
+				Offset:     5,
 				IncDeleted: false,
 			},
 			want: " WHERE name = 'test' AND DeleteDate IS NULL ORDER BY name ASC LIMIT 10 OFFSET 5",
@@ -301,7 +302,7 @@ func TestCriteriaString(t *testing.T) {
 		{
 			name: "where only",
 			criteria: dtorm.Criteria{
-				Where: where.Equal("name", "test"),
+				Where:      where.Equal("name", "test"),
 				IncDeleted: false,
 			},
 			want: " WHERE name = 'test' AND DeleteDate IS NULL",
@@ -309,7 +310,7 @@ func TestCriteriaString(t *testing.T) {
 		{
 			name: "order only",
 			criteria: dtorm.Criteria{
-				Order: "name ASC",
+				Order:      "name ASC",
 				IncDeleted: false,
 			},
 			want: "WHERE DeleteDate IS NULL ORDER BY name ASC",
