@@ -1091,3 +1091,7 @@ func Range[T Modeller](db *DB, criteria ...interface{}) iter.Seq[*T] {
 		}
 	}
 }
+
+func FromID[T Modeller](db *DB, id string) (*T, error) {
+	return First[T](db, where.Equal("ID", id))
+}
