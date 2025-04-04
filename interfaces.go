@@ -8,14 +8,14 @@ package mud
 type Updater interface {
 	// Update generates an update query for the object using the provided manager.
 	// Returns the generated query string and any error encountered.
-	Update(mgr Manager) (string, error)
+	Update(mgr Manager) error
 }
 
 // Restorer defines the interface for objects that can be restored from the database.
 type Restorer interface {
 	// Restore generates a restore query for the object using the provided manager.
 	// Returns the generated query string and any error encountered.
-	Restore(mgr Manager) (string, error)
+	Restore(mgr Manager) error
 }
 
 // Remover defines the interface for objects that can be removed from the database.

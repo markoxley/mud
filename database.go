@@ -897,11 +897,10 @@ func (db *DB) tableTest(m Modeller) ([]field, string, error) {
 // @return bool
 func (db *DB) Save(m Modeller) error {
 	if u, ok := m.(Updater); ok {
-		cmd, err := u.Update(db.mgr)
+		err := u.Update(db.mgr)
 		if err != nil {
 			return err
 		}
-		return db.executeQuery(cmd)
 	}
 	if m.IsNew() {
 		cmd, err := db.insertCommand(m)
@@ -1080,4 +1079,15 @@ func First[T Modeller](db *DB, criteria ...interface{}) (*T, error) {
 		return nil, NoResults("no results")
 	}
 	return r[0], err
+}
+
+func Range[T Modeller](db *DB, criteria ...interface{}) iter.Seq[*T] {
+	m := new(T)
+	return func(yield func(*T) bool) {
+		for mdl := range db.Range(*m, criteria...) {
+			if !yield(utils.Ptr(mdl.(T))) {
+				return
+			}
+		}
+	}
 }
