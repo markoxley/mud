@@ -33,8 +33,8 @@ import (
 // Define your model
 type User struct {
     mud.Model
-    Username  string `mud:"username"`
-    Email     string `mud:"email"`
+    Username  string `mud:"size:64,key:true"`
+    Email     string `mud:"size:256"`
 }
 
 func main() {
@@ -60,7 +60,7 @@ func main() {
         Email:    "john@example.com",
     }
 
-    err = db.Create(user)
+    err = db.Save(user)
     if err != nil {
         panic(err)
     }
@@ -69,6 +69,30 @@ func main() {
     var users []User
     where := where.Equal("username", "johndoe")
     err = db.Find(&users, where)
+    if err != nil {
+        panic(err)
+    }
+
+    // Update user, we reuse the Save method
+    user.Email = "john.doe@example.com"
+    err = db.Save(user)
+    if err != nil {
+        panic(err)
+    }
+
+    // Delete user
+    err = db.Remove(user)
+    if err != nil {
+        panic(err)
+    }
+
+    // Convenience functions with generics
+    user, err = mud.First[User](db, where.Equal("username", "johndoe"))
+    if err != nil {
+        panic(err)
+    }
+
+    user, err = mud.FromID[User](db, *user.ID)
     if err != nil {
         panic(err)
     }
@@ -102,6 +126,19 @@ where.In("field", []interface{}{value1, value2})
 // Combining conditions
 where.Equal("field1", value1).AndEqual("field2", value2)
 where.Equal("field1", value1).OrEqual("field2", value2)
+```
+
+## Order clause builder
+
+mud provides a powerful ORDER BY clause builder with support for various conditions:
+
+```go
+// Basic conditions
+order.Asc("field")
+order.Desc("field")
+
+// Combining conditions
+order.Asc("field1").Desc("field2")
 ```
 
 ## Model Tags
