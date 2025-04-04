@@ -37,7 +37,7 @@ func (m *MySQLManager) ConnectionString(cfg *Config) (string, error) {
 		return "", fmt.Errorf("invalid config provided")
 	}
 	m.dbName = cfg.Database
-	return fmt.Sprintf("mysql://%s:%s@%s/%s", cfg.User, cfg.Password, cfg.Host, cfg.Database), nil
+	return fmt.Sprintf("%s:%s@tcp(%s)/%s", cfg.User, cfg.Password, cfg.Host, cfg.Database), nil
 }
 
 // LimitString generates the MySQL specific LIMIT clause for result limiting.

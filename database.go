@@ -20,6 +20,10 @@ import (
 	"github.com/markoxley/dtorm/utils"
 	"github.com/markoxley/dtorm/where"
 	uuid "github.com/satori/go.uuid"
+
+	_ "github.com/go-sql-driver/mysql"
+	_ "github.com/microsoft/go-mssqldb"
+	_ "modernc.org/sqlite"
 )
 
 type DB struct {
