@@ -145,12 +145,10 @@ order.Asc("field1").Desc("field2")
 
 mud uses struct tags to define model properties:
 
-- `mud:"field_name"` - Specify database field name
-- `mud:"field_name,pk"` - Mark field as primary key
-- `mud:"field_name,size:255"` - Set field size
-- `mud:"field_name,nullable"` - Allow NULL values
-- `mud:"field_name,unique"` - Enforce uniqueness
-- `mud:"field_name,index"` - Create index on field
+- `mud:""` - Specify the field is to be included in the database
+- `mud:"key:true"` - Create an index on field
+- `mud:"size:255"` - Set field size
+- `mud:"allowNull"` - Allow NULL values
 
 ## License
 
