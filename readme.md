@@ -1,6 +1,8 @@
-# DTORM - Database ORM for Go
+# mud - Database ORM for Go
 
-DTORM is a versatile and lightweight ORM (Object-Relational Mapping) package for Go that supports multiple database backends including PostgreSQL, MySQL, SQLite, and Microsoft SQL Server.
+_Note: This is a work in progress and is not yet ready for production use._
+
+mud is a versatile and lightweight ORM (Object-Relational Mapping) package for Go that supports multiple database backends including PostgreSQL, MySQL, SQLite, and Microsoft SQL Server.
 
 ## Features
 
@@ -15,7 +17,7 @@ DTORM is a versatile and lightweight ORM (Object-Relational Mapping) package for
 ## Installation
 
 ```bash
-go get github.com/markoxley/dtorm
+go get github.com/markoxley/mud
 ```
 
 ## Quick Start
@@ -24,20 +26,20 @@ go get github.com/markoxley/dtorm
 package main
 
 import (
-    "github.com/markoxley/dtorm"
-    "github.com/markoxley/dtorm/where"
+    "github.com/markoxley/mud"
+    "github.com/markoxley/mud/where"
 )
 
 // Define your model
 type User struct {
-    dtorm.Model
-    Username  string `dtorm:"username"`
-    Email     string `dtorm:"email"`
+    mud.Model
+    Username  string `mud:"username"`
+    Email     string `mud:"email"`
 }
 
 func main() {
     // Initialize database connection
-    config := dtorm.Config{
+    config := mud.Config{
         Driver:   "mysql",
         Host:     "localhost",
         Port:     3306,
@@ -46,7 +48,7 @@ func main() {
         Password: "password",
     }
 
-    db, err := dtorm.Connect(config)
+    db, err := mud.Connect(config)
     if err != nil {
         panic(err)
     }
@@ -75,7 +77,7 @@ func main() {
 
 ## WHERE Clause Builder
 
-DTORM provides a powerful WHERE clause builder with support for various conditions:
+mud provides a powerful WHERE clause builder with support for various conditions:
 
 ```go
 // Basic conditions
@@ -104,14 +106,14 @@ where.Equal("field1", value1).OrEqual("field2", value2)
 
 ## Model Tags
 
-DTORM uses struct tags to define model properties:
+mud uses struct tags to define model properties:
 
-- `dtorm:"field_name"` - Specify database field name
-- `dtorm:"field_name,pk"` - Mark field as primary key
-- `dtorm:"field_name,size:255"` - Set field size
-- `dtorm:"field_name,nullable"` - Allow NULL values
-- `dtorm:"field_name,unique"` - Enforce uniqueness
-- `dtorm:"field_name,index"` - Create index on field
+- `mud:"field_name"` - Specify database field name
+- `mud:"field_name,pk"` - Mark field as primary key
+- `mud:"field_name,size:255"` - Set field size
+- `mud:"field_name,nullable"` - Allow NULL values
+- `mud:"field_name,unique"` - Enforce uniqueness
+- `mud:"field_name,index"` - Create index on field
 
 ## License
 

@@ -8,13 +8,13 @@ import (
 	"testing"
 	"time"
 
-	"github.com/markoxley/dtorm"
-	"github.com/markoxley/dtorm/utils"
+	"github.com/markoxley/mud"
+	"github.com/markoxley/mud/utils"
 )
 
 // ModelTest is a concrete implementation of Modeller for testing
 type ModelTest struct {
-	dtorm.Model
+	mud.Model
 	Name string
 }
 
@@ -63,7 +63,7 @@ func TestModelDisable(t *testing.T) {
 func TestGetTableName(t *testing.T) {
 	tests := []struct {
 		name string
-		m    dtorm.Modeller
+		m    mud.Modeller
 		want string
 	}{
 		{
@@ -80,7 +80,7 @@ func TestGetTableName(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got := dtorm.GetTableName(tt.m)
+			got := mud.GetTableName(tt.m)
 			if got != tt.want {
 				t.Errorf("getTableName() = %v, want %v", got, tt.want)
 			}
@@ -90,36 +90,36 @@ func TestGetTableName(t *testing.T) {
 
 func TestModelIsNew(t *testing.T) {
 	tests := []struct {
-		name        string
-		id          *string
-		createDate  time.Time
-		lastUpdate  time.Time
-		deleteDate  *time.Time
-		want        bool
+		name       string
+		id         *string
+		createDate time.Time
+		lastUpdate time.Time
+		deleteDate *time.Time
+		want       bool
 	}{
 		{
-			name:        "new model",
-			id:          nil,
-			createDate:  time.Time{},
-			lastUpdate:  time.Time{},
-			deleteDate:  nil,
-			want:        true,
+			name:       "new model",
+			id:         nil,
+			createDate: time.Time{},
+			lastUpdate: time.Time{},
+			deleteDate: nil,
+			want:       true,
 		},
 		{
-			name:        "existing model",
-			id:          utils.Ptr("123"),
-			createDate:  time.Now(),
-			lastUpdate:  time.Now(),
-			deleteDate:  nil,
-			want:        false,
+			name:       "existing model",
+			id:         utils.Ptr("123"),
+			createDate: time.Now(),
+			lastUpdate: time.Now(),
+			deleteDate: nil,
+			want:       false,
 		},
 		{
-			name:        "deleted model",
-			id:          utils.Ptr("123"),
-			createDate:  time.Now(),
-			lastUpdate:  time.Now(),
-			deleteDate:  utils.Ptr(time.Now()),
-			want:        false,
+			name:       "deleted model",
+			id:         utils.Ptr("123"),
+			createDate: time.Now(),
+			lastUpdate: time.Now(),
+			deleteDate: utils.Ptr(time.Now()),
+			want:       false,
 		},
 	}
 

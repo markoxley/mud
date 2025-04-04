@@ -7,50 +7,50 @@ package tests
 import (
 	"testing"
 
-	"github.com/markoxley/dtorm"
+	"github.com/markoxley/mud"
 )
 
 func TestNewSize(t *testing.T) {
 	tests := []struct {
-		name         string
-		size         int
-		decimal      int
-		wantSize     int
-		wantDecimal  int
+		name        string
+		size        int
+		decimal     int
+		wantSize    int
+		wantDecimal int
 	}{
 		{
-			name:         "zero size and decimal",
-			size:         0,
-			decimal:      0,
-			wantSize:     0,
-			wantDecimal:  0,
+			name:        "zero size and decimal",
+			size:        0,
+			decimal:     0,
+			wantSize:    0,
+			wantDecimal: 0,
 		},
 		{
-			name:         "positive size no decimal",
-			size:         10,
-			decimal:      0,
-			wantSize:     10,
-			wantDecimal:  0,
+			name:        "positive size no decimal",
+			size:        10,
+			decimal:     0,
+			wantSize:    10,
+			wantDecimal: 0,
 		},
 		{
-			name:         "positive size with decimal",
-			size:         10,
-			decimal:      2,
-			wantSize:     10,
-			wantDecimal:  2,
+			name:        "positive size with decimal",
+			size:        10,
+			decimal:     2,
+			wantSize:    10,
+			wantDecimal: 2,
 		},
 		{
-			name:         "large size with large decimal",
-			size:         255,
-			decimal:      10,
-			wantSize:     255,
-			wantDecimal:  10,
+			name:        "large size with large decimal",
+			size:        255,
+			decimal:     10,
+			wantSize:    255,
+			wantDecimal: 10,
 		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got := dtorm.NewSize(tt.size, tt.decimal)
+			got := mud.NewSize(tt.size, tt.decimal)
 			if got.Size != tt.wantSize {
 				t.Errorf("NewSize() size = %v, want %v", got.Size, tt.wantSize)
 			}
@@ -96,7 +96,7 @@ func TestFieldSizeString(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			fs := dtorm.NewSize(tt.size, tt.decimal)
+			fs := mud.NewSize(tt.size, tt.decimal)
 			if got := fs.String(); got != tt.want {
 				t.Errorf("FieldSize.String() = %v, want %v", got, tt.want)
 			}

@@ -8,53 +8,53 @@ import (
 	"testing"
 	"time"
 
-	"github.com/markoxley/dtorm"
-	"github.com/markoxley/dtorm/where"
+	"github.com/markoxley/mud"
+	"github.com/markoxley/mud/where"
 	"github.com/stretchr/testify/assert"
 )
 
-func getConfig(dbType string) *dtorm.Config {
+func getConfig(dbType string) *mud.Config {
 	switch strings.ToLower(dbType) {
 	case "sqlite", "sqlite3":
-		return &dtorm.Config{
+		return &mud.Config{
 			Type:     "sqlite",
 			Host:     "localhost:1433",
 			User:     "sa",
 			Password: "Dantooine2020!",
-			Database: "dtorm_test.db",
+			Database: "mud_test.db",
 		}
 	case "mssql", "sqlserver":
-		return &dtorm.Config{
+		return &mud.Config{
 			Type:     "mssql",
 			Host:     "localhost:1433",
 			User:     "sa",
 			Password: "Dantooine2020!",
-			Database: "dtorm_test",
+			Database: "mud_test",
 		}
 	case "mysql":
-		return &dtorm.Config{
+		return &mud.Config{
 			Type:     "mysql",
 			Host:     "localhost:3306",
 			User:     "root",
 			Password: "Dantooine2020!",
-			Database: "dtorm_test",
+			Database: "mud_test",
 		}
 	}
 	panic("Invalid database type")
 }
 
-func getDB(dbType string) *dtorm.DB {
+func getDB(dbType string) *mud.DB {
 	config := getConfig(dbType)
-	db, _ := dtorm.New(config)
+	db, _ := mud.New(config)
 	db.RawExecute("Delete from TestModel")
 	return db
 }
 
 // TestModel is a test model for database operations
 type TestModel struct {
-	dtorm.Model
-	Name string `dtorm:"size:255"`
-	Age  int    `dtorm:""`
+	mud.Model
+	Name string `mud:"size:255"`
+	Age  int    `mud:""`
 }
 
 func (t *TestModel) GetCreated() time.Time  { return t.CreateDate }
@@ -65,7 +65,7 @@ func (t *TestModel) TableName() string      { return "test_models" }
 func TestNew(t *testing.T) {
 	tests := []struct {
 		name    string
-		config  *dtorm.Config
+		config  *mud.Config
 		wantErr bool
 	}{
 		{
@@ -85,7 +85,7 @@ func TestNew(t *testing.T) {
 		},
 		{
 			name: "Invalid DB Type",
-			config: &dtorm.Config{
+			config: &mud.Config{
 				Type:     "invalid",
 				Database: "test.db",
 			},
@@ -95,7 +95,7 @@ func TestNew(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			db, err := dtorm.New(tt.config)
+			db, err := mud.New(tt.config)
 			if tt.wantErr {
 				assert.Error(t, err)
 				assert.Nil(t, db)
@@ -127,7 +127,7 @@ func TestSaveAndFetchSQLite(t *testing.T) {
 
 	// Test Fetch
 	//fetchedModels := make([]TestModel, 0)
-	fetchedModels, err := dtorm.Fetch[TestModel](db, where.Equal("ID", *model.ID))
+	fetchedModels, err := mud.Fetch[TestModel](db, where.Equal("ID", *model.ID))
 	assert.NoError(t, err)
 	assert.Len(t, fetchedModels, 1)
 
@@ -156,7 +156,7 @@ func TestSaveAndFetchMSSQL(t *testing.T) {
 
 	// Test Fetch
 	//fetchedModels := make([]TestModel, 0)
-	fetchedModels, err := dtorm.Fetch[TestModel](db, where.Equal("ID", *model.ID))
+	fetchedModels, err := mud.Fetch[TestModel](db, where.Equal("ID", *model.ID))
 	assert.NoError(t, err)
 	assert.Len(t, fetchedModels, 1)
 
@@ -184,7 +184,7 @@ func TestSaveAndFetchMySQL(t *testing.T) {
 
 	// Test Fetch
 	//fetchedModels := make([]TestModel, 0)
-	fetchedModels, err := dtorm.Fetch[TestModel](db, where.Equal("ID", *model.ID))
+	fetchedModels, err := mud.Fetch[TestModel](db, where.Equal("ID", *model.ID))
 	assert.NoError(t, err)
 	assert.Len(t, fetchedModels, 1)
 
@@ -210,7 +210,7 @@ func TestRemoveSQLite(t *testing.T) {
 	assert.Nil(t, err)
 
 	//Verify model is not fetchable
-	fetched, err := dtorm.Fetch[TestModel](db, where.Equal("ID", id))
+	fetched, err := mud.Fetch[TestModel](db, where.Equal("ID", id))
 	assert.NoError(t, err)
 	assert.Len(t, fetched, 0)
 	db.Close()
@@ -233,7 +233,7 @@ func TestRemoveMSSQL(t *testing.T) {
 	assert.Nil(t, err)
 
 	//Verify model is not fetchable
-	fetched, err := dtorm.Fetch[TestModel](db, where.Equal("ID", id))
+	fetched, err := mud.Fetch[TestModel](db, where.Equal("ID", id))
 	assert.NoError(t, err)
 	assert.Len(t, fetched, 0)
 	db.Close()
@@ -255,7 +255,7 @@ func TestRemoveMySQL(t *testing.T) {
 	assert.Nil(t, err)
 
 	//Verify model is not fetchable
-	fetched, err := dtorm.Fetch[TestModel](db, where.Equal("ID", id))
+	fetched, err := mud.Fetch[TestModel](db, where.Equal("ID", id))
 	assert.NoError(t, err)
 	assert.Len(t, fetched, 0)
 	db.Close()
@@ -374,13 +374,13 @@ func TestFirstSQLite(t *testing.T) {
 	}
 
 	// Test First
-	result, err := dtorm.First[TestModel](db, where.Equal("Age", 53))
+	result, err := mud.First[TestModel](db, where.Equal("Age", 53))
 	assert.NoError(t, err)
 	assert.Equal(t, "Second User", result.Name)
 	assert.Equal(t, 53, result.Age)
 
 	// Test First with non-existent criteria
-	result, err = dtorm.First[TestModel](db, where.Equal("Age", 999))
+	result, err = mud.First[TestModel](db, where.Equal("Age", 999))
 	assert.NotNil(t, err)
 	assert.Nil(t, result)
 }
@@ -400,13 +400,13 @@ func TestFirstMSSQL(t *testing.T) {
 	}
 
 	// Test First
-	result, err := dtorm.First[TestModel](db, where.Equal("Age", 53))
+	result, err := mud.First[TestModel](db, where.Equal("Age", 53))
 	assert.NoError(t, err)
 	assert.Equal(t, "Second User", result.Name)
 	assert.Equal(t, 53, result.Age)
 
 	// Test First with non-existent criteria
-	result, err = dtorm.First[TestModel](db, where.Equal("Age", 999))
+	result, err = mud.First[TestModel](db, where.Equal("Age", 999))
 	assert.NotNil(t, err)
 	assert.Nil(t, result)
 }
@@ -425,13 +425,13 @@ func TestFirstMySQL(t *testing.T) {
 	}
 
 	// Test First
-	result, err := dtorm.First[TestModel](db, where.Equal("Age", 53))
+	result, err := mud.First[TestModel](db, where.Equal("Age", 53))
 	assert.NoError(t, err)
 	assert.Equal(t, "Second User", result.Name)
 	assert.Equal(t, 53, result.Age)
 
 	// Test First with non-existent criteria
-	result, err = dtorm.First[TestModel](db, where.Equal("Age", 999))
+	result, err = mud.First[TestModel](db, where.Equal("Age", 999))
 	assert.NotNil(t, err)
 	assert.Nil(t, result)
 }

@@ -2,9 +2,9 @@
 // Use of this source code is governed by an MIT license that can be
 // found in the LICENSE file.
 
-// Package dtorm provides a database ORM (Object-Relational Mapping) implementation
+// Package mud provides a database ORM (Object-Relational Mapping) implementation
 // with support for SQLite, MySQL, and SQL Server databases.
-package dtorm
+package mud
 
 // Config represents the configuration for a database connection.
 // It contains all the necessary information to establish and configure a database connection.

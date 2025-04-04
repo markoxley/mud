@@ -8,7 +8,7 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/markoxley/dtorm/utils"
+	"github.com/markoxley/mud/utils"
 )
 
 // clause represents a single SQL WHERE clause condition
@@ -109,4 +109,3 @@ func newClause(c conjunction, f string, o operator, n bool, v ...interface{}) *c
 		values:      v,
 	}
 }
-

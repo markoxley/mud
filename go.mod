@@ -1,4 +1,4 @@
-module github.com/markoxley/dtorm
+module github.com/markoxley/mud
 
 go 1.24.0
 

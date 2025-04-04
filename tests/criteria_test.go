@@ -30,24 +30,24 @@ import (
 	"fmt"
 	"testing"
 
-	"github.com/markoxley/dtorm"
-	"github.com/markoxley/dtorm/where"
+	"github.com/markoxley/mud"
+	"github.com/markoxley/mud/where"
 )
 
 // mockManager implements the Manager interface for testing
 type mockManager struct {
-	db *dtorm.DB
+	db *mud.DB
 }
 
-func (m *mockManager) SetDB(db *dtorm.DB) {
+func (m *mockManager) SetDB(db *mud.DB) {
 	m.db = db
 }
 
-func (m *mockManager) GetDB() *dtorm.DB {
+func (m *mockManager) GetDB() *mud.DB {
 	return m.db
 }
 
-func (m *mockManager) ConnectionString(cfg *dtorm.Config) (string, error) {
+func (m *mockManager) ConnectionString(cfg *mud.Config) (string, error) {
 	return "mock_connection", nil
 }
 
@@ -70,14 +70,14 @@ func (m *mockManager) Operators() []string {
 	}
 }
 
-func (m *mockManager) LimitString(c *dtorm.Criteria) string {
+func (m *mockManager) LimitString(c *mud.Criteria) string {
 	if c == nil || c.Limit < 1 {
 		return ""
 	}
 	return fmt.Sprintf(" LIMIT %d", c.Limit)
 }
 
-func (m *mockManager) OffsetString(c *dtorm.Criteria) string {
+func (m *mockManager) OffsetString(c *mud.Criteria) string {
 	if c == nil || c.Offset < 1 {
 		return ""
 	}
@@ -122,12 +122,12 @@ func TestCriteriaWhereString(t *testing.T) {
 
 	tests := []struct {
 		name      string
-		criteria  dtorm.Criteria
+		criteria  mud.Criteria
 		wantWhere string
 	}{
 		{
 			name: "nil where",
-			criteria: dtorm.Criteria{
+			criteria: mud.Criteria{
 				Where:      nil,
 				IncDeleted: false,
 			},
@@ -135,7 +135,7 @@ func TestCriteriaWhereString(t *testing.T) {
 		},
 		{
 			name: "string where",
-			criteria: dtorm.Criteria{
+			criteria: mud.Criteria{
 				Where:      "name = 'test'",
 				IncDeleted: false,
 			},
@@ -143,7 +143,7 @@ func TestCriteriaWhereString(t *testing.T) {
 		},
 		{
 			name: "where builder pointer",
-			criteria: dtorm.Criteria{
+			criteria: mud.Criteria{
 				Where:      where.Equal("name", "test"),
 				IncDeleted: false,
 			},
@@ -151,7 +151,7 @@ func TestCriteriaWhereString(t *testing.T) {
 		},
 		{
 			name: "include deleted",
-			criteria: dtorm.Criteria{
+			criteria: mud.Criteria{
 				Where:      where.Equal("name", "test"),
 				IncDeleted: true,
 			},
@@ -182,26 +182,26 @@ func TestCriteriaOrderString(t *testing.T) {
 
 	tests := []struct {
 		name      string
-		criteria  dtorm.Criteria
+		criteria  mud.Criteria
 		wantOrder string
 	}{
 		{
 			name: "nil order",
-			criteria: dtorm.Criteria{
+			criteria: mud.Criteria{
 				Order: nil,
 			},
 			wantOrder: "",
 		},
 		{
 			name: "string order",
-			criteria: dtorm.Criteria{
+			criteria: mud.Criteria{
 				Order: "name ASC",
 			},
 			wantOrder: " ORDER BY name ASC",
 		},
 		{
 			name: "stringer order",
-			criteria: dtorm.Criteria{
+			criteria: mud.Criteria{
 				Order: orderStringer{order: "name DESC"},
 			},
 			wantOrder: " ORDER BY name DESC",
@@ -223,13 +223,13 @@ func TestCriteriaLimitOffset(t *testing.T) {
 
 	tests := []struct {
 		name       string
-		criteria   dtorm.Criteria
+		criteria   mud.Criteria
 		wantLimit  string
 		wantOffset string
 	}{
 		{
 			name: "no limit or offset",
-			criteria: dtorm.Criteria{
+			criteria: mud.Criteria{
 				Limit:  0,
 				Offset: 0,
 			},
@@ -238,7 +238,7 @@ func TestCriteriaLimitOffset(t *testing.T) {
 		},
 		{
 			name: "with limit",
-			criteria: dtorm.Criteria{
+			criteria: mud.Criteria{
 				Limit:  10,
 				Offset: 0,
 			},
@@ -247,7 +247,7 @@ func TestCriteriaLimitOffset(t *testing.T) {
 		},
 		{
 			name: "with offset",
-			criteria: dtorm.Criteria{
+			criteria: mud.Criteria{
 				Limit:  0,
 				Offset: 5,
 			},
@@ -256,7 +256,7 @@ func TestCriteriaLimitOffset(t *testing.T) {
 		},
 		{
 			name: "with both",
-			criteria: dtorm.Criteria{
+			criteria: mud.Criteria{
 				Limit:  10,
 				Offset: 5,
 			},
@@ -285,12 +285,12 @@ func TestCriteriaString(t *testing.T) {
 
 	tests := []struct {
 		name     string
-		criteria dtorm.Criteria
+		criteria mud.Criteria
 		want     string
 	}{
 		{
 			name: "complete query",
-			criteria: dtorm.Criteria{
+			criteria: mud.Criteria{
 				Where:      where.Equal("name", "test"),
 				Order:      "name ASC",
 				Limit:      10,
@@ -301,7 +301,7 @@ func TestCriteriaString(t *testing.T) {
 		},
 		{
 			name: "where only",
-			criteria: dtorm.Criteria{
+			criteria: mud.Criteria{
 				Where:      where.Equal("name", "test"),
 				IncDeleted: false,
 			},
@@ -309,7 +309,7 @@ func TestCriteriaString(t *testing.T) {
 		},
 		{
 			name: "order only",
-			criteria: dtorm.Criteria{
+			criteria: mud.Criteria{
 				Order:      "name ASC",
 				IncDeleted: false,
 			},

@@ -1,8 +1,8 @@
 // Copyright (c) 2025 DaggerTech. All rights reserved.
 // Use of this source code is governed by an MIT license that can be
 // found in the LICENSE file.
-// Package dtorm provides interfaces and utilities for database model management.
-package dtorm
+// Package mud provides interfaces and utilities for database model management.
+package mud
 
 import (
 	"reflect"
@@ -89,8 +89,8 @@ func getDefs(t interface{}, first bool) []field {
 				res = append(res, subf...)
 			}
 		} else {
-			// Process dtorm tags for field configuration
-			if tg, ok := st.Tag.Lookup("dtorm"); ok {
+			// Process mud tags for field configuration
+			if tg, ok := st.Tag.Lookup("mud"); ok {
 				nm := st.Name
 				szMj := 0      // Major size (e.g., varchar length)
 				szMn := 0      // Minor size (e.g., decimal places)

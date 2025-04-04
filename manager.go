@@ -1,8 +1,8 @@
 // Copyright (c) 2025 DaggerTech. All rights reserved.
 // Use of this source code is governed by an MIT license that can be
 // found in the LICENSE file.
-// Package dtorm provides database management interfaces and implementations.
-package dtorm
+// Package mud provides database management interfaces and implementations.
+package mud
 
 import (
 	"fmt"

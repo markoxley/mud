@@ -29,7 +29,7 @@ package tests
 import (
 	"testing"
 
-	"github.com/markoxley/dtorm/order"
+	"github.com/markoxley/mud/order"
 )
 
 func TestNewOrder(t *testing.T) {

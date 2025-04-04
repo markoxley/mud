@@ -1,9 +1,9 @@
 // Copyright (c) 2025 DaggerTech. All rights reserved.
 // Use of this source code is governed by an MIT license that can be
 // found in the LICENSE file.
-// Package dtorm provides a database ORM (Object-Relational Mapping) implementation
+// Package mud provides a database ORM (Object-Relational Mapping) implementation
 // with support for SQLite, MySQL, and SQL Server databases.
-package dtorm
+package mud
 
 import "fmt"
 
@@ -19,10 +19,13 @@ type FieldSize struct {
 // NewSize creates a new FieldSize with the specified size and decimal places.
 // This function is used to define the size constraints for database fields.
 // Parameters:
-//   sz: The maximum length of the field
-//   dec: The number of decimal places (for numeric types)
+//
+//	sz: The maximum length of the field
+//	dec: The number of decimal places (for numeric types)
+//
 // Returns:
-//   A new FieldSize instance
+//
+//	A new FieldSize instance
 func NewSize(sz, dec int) FieldSize {
 	return FieldSize{
 		Size:    sz,
@@ -35,7 +38,8 @@ func NewSize(sz, dec int) FieldSize {
 // For other types, it returns just the size.
 // This method is used for generating SQL schema definitions.
 // Returns:
-//   A string representation of the field size
+//
+//	A string representation of the field size
 func (s FieldSize) String() string {
 	if s.Decimal > 0 {
 		return fmt.Sprintf("%d,%d", s.Size, s.Decimal)

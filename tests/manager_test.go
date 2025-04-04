@@ -7,68 +7,68 @@ package tests
 import (
 	"testing"
 
-	"github.com/markoxley/dtorm"
+	"github.com/markoxley/mud"
 )
 
 func TestGetManager(t *testing.T) {
 	tests := []struct {
 		name       string
-		config     *dtorm.Config
+		config     *mud.Config
 		wantType   string
 		wantErr    bool
 		errMessage string
 	}{
 		{
 			name: "sqlite manager",
-			config: &dtorm.Config{
+			config: &mud.Config{
 				Type: "sqlite",
 			},
-			wantType: "*dtorm.SqliteManager",
+			wantType: "*mud.SqliteManager",
 			wantErr:  false,
 		},
 		{
 			name: "sqlite3 manager",
-			config: &dtorm.Config{
+			config: &mud.Config{
 				Type: "sqlite3",
 			},
-			wantType: "*dtorm.SqliteManager",
+			wantType: "*mud.SqliteManager",
 			wantErr:  false,
 		},
 		{
 			name: "mysql manager",
-			config: &dtorm.Config{
+			config: &mud.Config{
 				Type: "mysql",
 			},
-			wantType: "*dtorm.MySQLManager",
+			wantType: "*mud.MySQLManager",
 			wantErr:  false,
 		},
 		{
 			name: "mariadb manager",
-			config: &dtorm.Config{
+			config: &mud.Config{
 				Type: "mariadb",
 			},
-			wantType: "*dtorm.MySQLManager",
+			wantType: "*mud.MySQLManager",
 			wantErr:  false,
 		},
 		{
 			name: "sqlserver manager",
-			config: &dtorm.Config{
+			config: &mud.Config{
 				Type: "sqlserver",
 			},
-			wantType: "*dtorm.MSSQLManager",
+			wantType: "*mud.MSSQLManager",
 			wantErr:  false,
 		},
 		{
 			name: "mssql manager",
-			config: &dtorm.Config{
+			config: &mud.Config{
 				Type: "mssql",
 			},
-			wantType: "*dtorm.MSSQLManager",
+			wantType: "*mud.MSSQLManager",
 			wantErr:  false,
 		},
 		{
 			name: "invalid manager type",
-			config: &dtorm.Config{
+			config: &mud.Config{
 				Type: "invalid",
 			},
 			wantType:   "",
@@ -86,7 +86,7 @@ func TestGetManager(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got, err := dtorm.GetManager(tt.config)
+			got, err := mud.GetManager(tt.config)
 			if (err != nil) != tt.wantErr {
 				t.Errorf("GetManager() error = %v, wantErr %v", err, tt.wantErr)
 				return
@@ -96,7 +96,7 @@ func TestGetManager(t *testing.T) {
 				return
 			}
 			if !tt.wantErr {
-				gotType := dtorm.GetTypeName(got)
+				gotType := mud.GetTypeName(got)
 				if gotType != tt.wantType {
 					t.Errorf("GetManager() = %v, want %v", gotType, tt.wantType)
 				}

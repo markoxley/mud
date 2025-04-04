@@ -30,7 +30,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/markoxley/dtorm/utils"
+	"github.com/markoxley/mud/utils"
 )
 
 func TestMakeValue(t *testing.T) {

@@ -1,7 +1,7 @@
 // Copyright (c) 2025 DaggerTech. All rights reserved.
 // Use of this source code is governed by an MIT license that can be
 // found in the LICENSE file.
-package dtorm
+package mud
 
 import (
 	"database/sql"
@@ -16,9 +16,9 @@ import (
 	"strings"
 	"time"
 
-	"github.com/markoxley/dtorm/order"
-	"github.com/markoxley/dtorm/utils"
-	"github.com/markoxley/dtorm/where"
+	"github.com/markoxley/mud/order"
+	"github.com/markoxley/mud/utils"
+	"github.com/markoxley/mud/where"
 	uuid "github.com/satori/go.uuid"
 
 	_ "github.com/go-sql-driver/mysql"
