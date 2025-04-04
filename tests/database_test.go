@@ -4,23 +4,50 @@
 package tests
 
 import (
+	"fmt"
+	"strings"
 	"testing"
 	"time"
 
+	_ "github.com/go-sql-driver/mysql"
 	"github.com/markoxley/dtorm"
 	"github.com/markoxley/dtorm/where"
+	//_ "github.com/mattn/go-sqlite3"
 	_ "github.com/microsoft/go-mssqldb"
 	"github.com/stretchr/testify/assert"
+	_ "modernc.org/sqlite"
 )
 
+const DBType = "sqlite"
+
 func getConfig() *dtorm.Config {
-	return &dtorm.Config{
-		Type:     "mssql",
-		Host:     "localhost:1433",
-		User:     "sa",
-		Password: "Dantooine2020!",
-		Database: "dtorm_test",
+	switch strings.ToLower(DBType) {
+	case "sqlite", "sqlite3":
+		return &dtorm.Config{
+			Type:     "sqlite",
+			Host:     "localhost:1433",
+			User:     "sa",
+			Password: "Dantooine2020!",
+			Database: "dtorm_test.db",
+		}
+	case "mssql", "sqlserver":
+		return &dtorm.Config{
+			Type:     "mssql",
+			Host:     "localhost:1433",
+			User:     "sa",
+			Password: "Dantooine2020!",
+			Database: "dtorm_test",
+		}
+	case "mysql":
+		return &dtorm.Config{
+			Type:     "mysql",
+			Host:     "localhost:3306",
+			User:     "root",
+			Password: "Dantooine2020!",
+			Database: "dtorm_test",
+		}
 	}
+	panic("Invalid database type")
 }
 
 func getDB() *dtorm.DB {
@@ -49,7 +76,7 @@ func TestNew(t *testing.T) {
 		wantErr bool
 	}{
 		{
-			name:    "Valid MSSQL Config",
+			name:    fmt.Sprintf("Valid %s Config", DBType),
 			config:  getConfig(),
 			wantErr: false,
 		},

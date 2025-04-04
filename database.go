@@ -41,10 +41,21 @@ func New(config *Config) (*DB, error) {
 	if err != nil {
 		return nil, err
 	}
+	var dbType string
+	switch config.Type {
+	case "sqlite", "sqlite3":
+		dbType = "sqlite"
+	case "mysql", "mariadb":
+		dbType = "mysql"
+	case "sqlserver", "mssql":
+		dbType = "sqlserver"
+	default:
+		return nil, fmt.Errorf("invalid database type: %s", config.Type)
+	}
 	db := &DB{
 		mgr:              mgr,
 		cfg:              config,
-		dbtype:           config.Type,
+		dbtype:           dbType,
 		connectionString: cs,
 		knownTables:      make([]string, 0),
 		tableDef:         make(map[string][]field),
