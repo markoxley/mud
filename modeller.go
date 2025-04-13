@@ -120,34 +120,34 @@ func getDefs(t interface{}, first bool) []field {
 					tgs := strings.Split(tg, ",")
 					for _, t := range tgs {
 						pts := strings.Split(t, ":")
-						if len(pts) == 2 {
-							switch pts[0] {
-							case "type":
-								typeKey := pts[1]
-								if typeKey == "time" {
-									typeKey = "struct"
-								}
-								if v, ok := fieldNames[typeKey]; ok {
-									fld = v
-								}
-							case "size":
-								szPt := strings.Split(pts[1], ",")
-								if v, err := strconv.ParseInt(szPt[0], 10, 64); err == nil {
-									szMj = int(v)
-									if len(szPt) > 1 {
-										if v, err = strconv.ParseInt(szPt[1], 10, 64); err == nil {
-											szMn = int(v)
-										}
+
+						switch pts[0] {
+						case "type":
+							typeKey := pts[1]
+							if typeKey == "time" {
+								typeKey = "struct"
+							}
+							if v, ok := fieldNames[typeKey]; ok {
+								fld = v
+							}
+						case "size":
+							szPt := strings.Split(pts[1], ",")
+							if v, err := strconv.ParseInt(szPt[0], 10, 64); err == nil {
+								szMj = int(v)
+								if len(szPt) > 1 {
+									if v, err = strconv.ParseInt(szPt[1], 10, 64); err == nil {
+										szMn = int(v)
 									}
 								}
-							case "identity":
-								id = pts[1] == "true"
-							case "key":
-								key = pts[1] == "true"
-							case "unsigned":
-								uns = pts[1] == "true"
 							}
+						case "identity":
+							id = true
+						case "key":
+							key = true
+						case "unsigned":
+							uns = true
 						}
+
 					}
 				}
 				res = append(res, newField(nm, fld, szMj, szMn, id, key, uns, null))
