@@ -895,7 +895,7 @@ func (db *DB) tableTest(m Modeller) ([]field, string, error) {
 // an update or an insert command
 // @param m
 // @return bool
-func (db *DB) Save(m Modeller) error {
+func (db *DB) Save(m Modeller, tx ...*sql.Tx) error {
 	if u, ok := m.(Updater); ok {
 		err := u.Update(db.mgr)
 		if err != nil {
@@ -913,13 +913,13 @@ func (db *DB) Save(m Modeller) error {
 	if err != nil {
 		return err
 	}
-	return db.executeQuery(updCmd)
+	return db.executeQuery(updCmd, tx...)
 }
 
 // Remove removes the passed model from the database
 // @param m
 // @return bool
-func (db *DB) Remove(m Modeller) error {
+func (db *DB) Remove(m Modeller, tx ...*sql.Tx) error {
 	if m.GetID() == nil {
 		return nil
 	}
@@ -932,7 +932,7 @@ func (db *DB) Remove(m Modeller) error {
 	} else {
 		s = db.massDisable(m, c)
 	}
-	return db.executeQuery(s)
+	return db.executeQuery(s, tx...)
 }
 
 func (db *DB) massDelete(m Modeller, c *Criteria) string {
@@ -978,7 +978,7 @@ func (db *DB) massDisable(m Modeller, c *Criteria) string {
 // @param c
 // @return int
 // @return bool
-func (db *DB) RemoveMany(m Modeller, c *Criteria) (int, error) {
+func (db *DB) RemoveMany(m Modeller, c *Criteria, tx ...*sql.Tx) (int, error) {
 	t := GetTableName(m)
 	if !db.tableExists(t) {
 		return 0, nil
@@ -993,7 +993,7 @@ func (db *DB) RemoveMany(m Modeller, c *Criteria) (int, error) {
 	} else {
 		s = db.massDisable(m, c)
 	}
-	err := db.executeQuery(s)
+	err := db.executeQuery(s, tx...)
 	return r, err
 }
 
