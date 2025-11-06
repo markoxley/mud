@@ -59,7 +59,7 @@ func TestNewOrder(t *testing.T) {
 			if !tt.ascending {
 				o = order.Desc(tt.field)
 			}
-			if got := o.String(); got != tt.want {
+			if got := o.String(func(f string) string { return "`" + f + "`" }); got != tt.want {
 				t.Errorf("order.String() = %v, want %v", got, tt.want)
 			}
 		})
@@ -105,7 +105,7 @@ func TestBuilder(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			b := tt.fn()
-			if got := b.String(); got != tt.want {
+			if got := b.String(func(f string) string { return "`" + f + "`" }); got != tt.want {
 				t.Errorf("Builder.String() = %v, want %v", got, tt.want)
 			}
 		})

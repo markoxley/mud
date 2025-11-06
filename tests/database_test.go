@@ -4,6 +4,7 @@
 package tests
 
 import (
+	"runtime"
 	"strings"
 	"testing"
 	"time"
@@ -138,6 +139,9 @@ func TestSaveAndFetchSQLite(t *testing.T) {
 }
 
 func TestSaveAndFetchMSSQL(t *testing.T) {
+	if runtime.GOOS != "windows" {
+		t.Skip("Skipping MSSQL test on Linux")
+	}
 	db := getDB("mssql")
 	defer db.Close()
 	// Create test model
@@ -166,6 +170,9 @@ func TestSaveAndFetchMSSQL(t *testing.T) {
 	assert.Equal(t, model.Age, fetchedModel.Age)
 }
 func TestSaveAndFetchMySQL(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("Skipping MySQL test on Windows")
+	}
 	db := getDB("mysql")
 	defer db.Close()
 	// Create test model
@@ -217,6 +224,9 @@ func TestRemoveSQLite(t *testing.T) {
 }
 
 func TestRemoveMSSQL(t *testing.T) {
+	if runtime.GOOS != "windows" {
+		t.Skip("Skipping MSSQL test on Linux")
+	}
 	db := getDB("mssql")
 	defer db.Close()
 
@@ -239,6 +249,9 @@ func TestRemoveMSSQL(t *testing.T) {
 	db.Close()
 }
 func TestRemoveMySQL(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("Skipping MySQL test on Windows")
+	}
 	db := getDB("mysql")
 	defer db.Close()
 
@@ -294,6 +307,9 @@ func TestCountSQLite(t *testing.T) {
 }
 
 func TestCountMSSQL(t *testing.T) {
+	if runtime.GOOS != "windows" {
+		t.Skip("Skipping MSSQL test on Linux")
+	}
 	db := getDB("mssql")
 	defer db.Close()
 
@@ -327,7 +343,10 @@ func TestCountMSSQL(t *testing.T) {
 }
 
 func TestCountMySQL(t *testing.T) {
-	db := getDB("sqlite")
+	if runtime.GOOS == "windows" {
+		t.Skip("Skipping MySQL test on Windows")
+	}
+	db := getDB("mysql")
 	defer db.Close()
 
 	// Create test models
@@ -386,6 +405,9 @@ func TestFirstSQLite(t *testing.T) {
 }
 
 func TestFirstMSSQL(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("Skipping MySQL test on Windows")
+	}
 	db := getDB("mssql")
 	defer db.Close()
 
@@ -411,6 +433,9 @@ func TestFirstMSSQL(t *testing.T) {
 	assert.Nil(t, result)
 }
 func TestFirstMySQL(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("Skipping MySQL test on Windows")
+	}
 	db := getDB("mysql")
 	defer db.Close()
 

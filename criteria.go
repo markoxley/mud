@@ -8,6 +8,7 @@ package mud
 import (
 	"fmt"
 
+	"github.com/markoxley/mud/order"
 	"github.com/markoxley/mud/where"
 )
 
@@ -79,19 +80,19 @@ func (c Criteria) OrderString(mgr Manager) string {
 	if c.Order == nil {
 		return ""
 	}
-	order := ""
-	switch c.Order.(type) {
-	case string:
-		order, _ = c.Order.(string)
-	case fmt.Stringer:
-		st, _ := c.Order.(fmt.Stringer)
-		order = st.String()
+	orderStr := ""
+	if s, ok := c.Order.(string); ok {
+		orderStr = s
+	} else if ob, ok := c.Order.(*order.Builder); ok {
+		orderStr = ob.String(mgr.IdentityString)
+	} else if str, ok := c.Order.(interface{ String() string }); ok {
+		orderStr = str.String()
 	}
 
-	if order != "" {
-		order = fmt.Sprintf(" ORDER BY %s", order)
+	if orderStr != "" {
+		orderStr = fmt.Sprintf(" ORDER BY %s", orderStr)
 	}
-	return order
+	return orderStr
 }
 
 // LimitString returns the limiter in SQL format

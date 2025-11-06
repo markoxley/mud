@@ -29,12 +29,12 @@ func newBuilder() *Builder {
 		fields: make([]order, 0, 0),
 	}
 }
-func (o *order) String() string {
+func (o *order) String(fn func(f string) string) string {
 	d := "asc"
 	if !o.ascending {
 		d = "desc"
 	}
-	return fmt.Sprintf("`%s` %s", o.field, d)
+	return fmt.Sprintf("%s %s", fn(o.field), d)
 }
 
 // Desc creates a new Builder with the first ordering field being descending
@@ -64,14 +64,13 @@ func (b *Builder) Asc(field string) *Builder {
 }
 
 // String returns the string version of the ordering list
-func (b *Builder) String() string {
+func (b *Builder) String(fn func(f string) string) string {
 	r := ""
 	for _, o := range b.fields {
 		if r != "" {
 			r += ", "
 		}
-		r += o.String()
+		r += o.String(fn)
 	}
 	return r
 }
-
