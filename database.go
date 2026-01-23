@@ -8,7 +8,6 @@ import (
 	"errors"
 	"fmt"
 	"iter"
-	"log"
 	"reflect"
 	"regexp"
 	"slices"
@@ -957,7 +956,7 @@ func (db *DB) massDisable(m Modeller, c *Criteria) string {
 	deleteDate := db.mgr.IdentityString("DeleteDate")
 	name := GetTableName(m)
 	s := fmt.Sprintf("UPDATE %s SET %s = '%v'", db.mgr.IdentityString(name), deleteDate, utils.TimeToSQL(tm))
-	log.Println(c.WhereString(db.mgr))
+
 	whereAdded := false
 	if c != nil && c.Where != "" {
 		trimmed := strings.TrimSpace(c.WhereString(db.mgr))
