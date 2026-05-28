@@ -73,6 +73,10 @@ func New(config *Config) (*DB, error) {
 	return db, nil
 }
 
+func (db *DB) SqlDB() *sql.DB {
+	return db.db
+}
+
 func (db *DB) Close() {
 	if db.db != nil {
 		db.disconnect(db.db)
