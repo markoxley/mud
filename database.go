@@ -8,7 +8,6 @@ import (
 	"errors"
 	"fmt"
 	"iter"
-	"log"
 	"reflect"
 	"regexp"
 	"slices"
@@ -107,6 +106,9 @@ func (db *DB) disconnect(d *sql.DB) {
 // @return *sql.Tx
 // @return error
 func (db *DB) beginTransaction(d *sql.DB) (*sql.Tx, error) {
+	if db.dbtype == "sqlite" {
+		return nil, nil
+	}
 	return d.Begin()
 }
 
@@ -138,16 +140,17 @@ func (db *DB) BeginTransaction() (*sql.Tx, error) {
 func (db *DB) selectScalar(q string, tx ...*sql.Tx) (interface{}, bool) {
 	var qtx *sql.Tx
 	var err error
-	if len(tx) > 0 {
-		qtx = tx[0]
-	} else if !db.cfg.DisabledTransactions {
-		qtx, err = db.beginTransaction(db.db)
-		if err != nil {
-			return nil, false
+	if db.dbtype != "sqlite" {
+		if len(tx) > 0 {
+			qtx = tx[0]
+		} else if !db.cfg.DisabledTransactions {
+			qtx, err = db.beginTransaction(db.db)
+			if err != nil {
+				return nil, false
+			}
+			defer db.CommitTransaction(qtx)
 		}
-		defer db.CommitTransaction(qtx)
 	}
-
 	var res *sql.Rows
 	if qtx != nil {
 		res, err = qtx.Query(q)
@@ -176,14 +179,16 @@ func (db *DB) selectScalar(q string, tx ...*sql.Tx) (interface{}, bool) {
 func (db *DB) selectQuery(m Modeller, q string, tx ...*sql.Tx) ([]Modeller, bool) {
 	var qtx *sql.Tx
 	var err error
-	if len(tx) > 0 {
-		qtx = tx[0]
-	} else if !db.cfg.DisabledTransactions {
-		qtx, err = db.beginTransaction(db.db)
-		if err != nil {
-			return nil, false
+	if db.dbtype != "sqlite" {
+		if len(tx) > 0 {
+			qtx = tx[0]
+		} else if !db.cfg.DisabledTransactions {
+			qtx, err = db.beginTransaction(db.db)
+			if err != nil {
+				return nil, false
+			}
+			defer db.CommitTransaction(qtx)
 		}
-		defer db.CommitTransaction(qtx)
 	}
 	var res *sql.Rows
 	if qtx != nil {
@@ -523,14 +528,16 @@ func (db *DB) updateModel(m Modeller, id string, createdate time.Time, updatedat
 func (db *DB) executeQuery(q string, tx ...*sql.Tx) error {
 	var qtx *sql.Tx
 	var err error
-	if len(tx) > 0 {
-		qtx = tx[0]
-	} else if !db.cfg.DisabledTransactions {
-		qtx, err = db.beginTransaction(db.db)
-		defer db.CommitTransaction(qtx)
-	}
-	if err != nil {
-		return err
+	if db.dbtype != "sqlite" {
+		if len(tx) > 0 {
+			qtx = tx[0]
+		} else if !db.cfg.DisabledTransactions {
+			qtx, err = db.beginTransaction(db.db)
+			defer db.CommitTransaction(qtx)
+		}
+		if err != nil {
+			return err
+		}
 	}
 	if qtx != nil {
 		_, err = qtx.Exec(q)
@@ -585,14 +592,16 @@ func (db *DB) RawScalar(sql string, tx ...*sql.Tx) (interface{}, bool) {
 func (db *DB) RawSelect(qry string, tx ...*sql.Tx) ([]map[string]interface{}, error) {
 	var qtx *sql.Tx
 	var err error
-	if len(tx) > 0 {
-		qtx = tx[0]
-	} else if !db.cfg.DisabledTransactions {
-		qtx, err = db.beginTransaction(db.db)
-		if err != nil {
-			return nil, err
+	if db.dbtype != "sqlite" {
+		if len(tx) > 0 {
+			qtx = tx[0]
+		} else if !db.cfg.DisabledTransactions {
+			qtx, err = db.beginTransaction(db.db)
+			if err != nil {
+				return nil, err
+			}
+			defer db.CommitTransaction(qtx)
 		}
-		defer db.CommitTransaction(qtx)
 	}
 	var res *sql.Rows
 	if qtx != nil {
@@ -961,7 +970,7 @@ func (db *DB) massDisable(m Modeller, c *Criteria) string {
 	deleteDate := db.mgr.IdentityString("DeleteDate")
 	name := GetTableName(m)
 	s := fmt.Sprintf("UPDATE %s SET %s = '%v'", db.mgr.IdentityString(name), deleteDate, utils.TimeToSQL(tm))
-	log.Println(c.WhereString(db.mgr))
+
 	whereAdded := false
 	if c != nil && c.Where != "" {
 		trimmed := strings.TrimSpace(c.WhereString(db.mgr))

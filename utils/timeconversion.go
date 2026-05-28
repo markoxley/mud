@@ -91,21 +91,37 @@ func SQLToTime(st string) (*time.Time, bool) {
 		if e != nil {
 			return nil, false
 		}
-		s, e = strconv.Atoi(timeParts[2])
+		secStr := ""
+		nsStr := ""
+		inNS := false
+		nums := "0123456789"
+		for _, c := range timeParts[2] {
+			if c == '.' && inNS {
+				break
+			}
+			if c == '.' {
+				inNS = true
+				continue
+			}
+			if !strings.Contains(nums, string(c)) {
+				break
+			}
+			if inNS {
+				nsStr += string(c)
+			} else {
+				secStr += string(c)
+			}
+		}
+		s, e = strconv.Atoi(secStr)
 		if e != nil {
 			return nil, false
 		}
-		if strings.Contains(timeParts[2], ".") {
-			nsParts := strings.Split(timeParts[2], ".")
-			if len(nsParts) > 1 {
-				ns, e = strconv.Atoi(nsParts[1])
-				if e != nil {
-					return nil, false
-				}
-			}
+
+		ns, e = strconv.Atoi(nsStr)
+		if e != nil {
+			return nil, false
 		}
 	}
-
 	// Create and return time.Time object
 	t := time.Date(y, time.Month(m), d, h, mn, s, ns, time.UTC)
 	return &t, true
