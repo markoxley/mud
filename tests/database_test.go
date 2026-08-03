@@ -6,6 +6,7 @@ package tests
 import (
 	"runtime"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -62,6 +63,17 @@ func (t *TestModel) GetCreated() time.Time  { return t.CreateDate }
 func (t *TestModel) GetUpdated() time.Time  { return t.LastUpdate }
 func (t *TestModel) GetDeleted() *time.Time { return t.DeleteDate }
 func (t *TestModel) TableName() string      { return "test_models" }
+
+// ConcurrentModel is a separate model type used by the concurrency test so
+// that its table definition is cold at the start of the test, forcing
+// concurrent goroutines to race on the shared table-definition cache.
+type ConcurrentModel struct {
+	mud.Model
+	Name string `mud:"size:255"`
+	N    int    `mud:""`
+}
+
+func (t *ConcurrentModel) TableName() string { return "concurrent_models" }
 
 func TestNew(t *testing.T) {
 	tests := []struct {
@@ -404,9 +416,62 @@ func TestFirstSQLite(t *testing.T) {
 	assert.Nil(t, result)
 }
 
+// TestConcurrentFetchSaveSQLite exercises the race between Fetch and Save.
+// Both operations touch the shared table-definition cache and known-tables
+// slice on the *mud.DB. Without synchronization this triggers concurrent
+// map read/write (which panics) and concurrent slice appends. Run with
+// -race to verify the fix.
+func TestConcurrentFetchSaveSQLite(t *testing.T) {
+	cfg := getConfig("sqlite")
+	// Add a busy timeout so concurrent SQLite writes wait instead of failing
+	// with SQLITE_BUSY. This isolates the test from DB-level locking so it
+	// exercises the library's in-memory shared state under real concurrency.
+	cfg.Database = "mud_test.db?_pragma=busy_timeout(5000)"
+	db, err := mud.New(cfg)
+	if err != nil {
+		t.Fatalf("open: %v", err)
+	}
+	defer db.Close()
+	// Serialize the connection pool. This avoids SQLITE_BUSY write-write
+	// deadlocks (orthogonal to the library race) while still allowing the
+	// Go-level table-definition cache access to run concurrently across
+	// goroutines, which is what this test is verifying.
+	db.Connection().SetMaxOpenConns(1)
+	db.RawExecute("DROP TABLE IF EXISTS concurrent_models")
+
+	// Use a cold model type so its table definition is not yet cached. All
+	// goroutines start simultaneously via the barrier, forcing them to race
+	// on the shared tableDef map and knownTables slice.
+	var wg sync.WaitGroup
+	const goroutines = 8
+	const iterations = 50
+	barrier := make(chan struct{})
+
+	for i := 0; i < goroutines; i++ {
+		wg.Add(1)
+		go func(id int) {
+			defer wg.Done()
+			<-barrier
+			for j := 0; j < iterations; j++ {
+				m := &ConcurrentModel{Name: "Concurrent", N: id*100 + j}
+				if err := db.Save(m); err != nil {
+					t.Errorf("save: %v", err)
+					return
+				}
+				if _, err := mud.Fetch[ConcurrentModel](db, where.Equal("ID", *m.ID)); err != nil {
+					t.Errorf("fetch: %v", err)
+					return
+				}
+			}
+		}(i)
+	}
+	close(barrier)
+	wg.Wait()
+}
+
 func TestFirstMSSQL(t *testing.T) {
 	if runtime.GOOS == "windows" {
-		t.Skip("Skipping MySQL test on Windows")
+		t.Skip("Skipping MSSQL test on Windows")
 	}
 	db := getDB("mssql")
 	defer db.Close()
@@ -432,10 +497,9 @@ func TestFirstMSSQL(t *testing.T) {
 	assert.NotNil(t, err)
 	assert.Nil(t, result)
 }
+
 func TestFirstMySQL(t *testing.T) {
-	if runtime.GOOS == "windows" {
-		t.Skip("Skipping MySQL test on Windows")
-	}
+
 	db := getDB("mysql")
 	defer db.Close()
 

@@ -13,6 +13,7 @@ import (
 	"slices"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/markoxley/mud/order"
@@ -31,6 +32,7 @@ type DB struct {
 	dbtype           string
 	mgr              Manager
 	db               *sql.DB
+	mu               sync.RWMutex
 	knownTables      []string
 	tableDef         map[string][]field
 }
@@ -221,7 +223,9 @@ func (db *DB) populateModel(m Modeller, r *sql.Rows) ([]Modeller, bool) {
 	// Get the fields of the model and build a map of them
 	//t := reflect.TypeOf(*m)
 	mdl := reflect.New(s).Interface().(Modeller)
+	db.mu.RLock()
 	flds, ok := db.tableDef[GetTableName(mdl)]
+	db.mu.RUnlock()
 	if !ok {
 		return nil, false
 	}
@@ -367,7 +371,9 @@ func (db *DB) populateSingle(m Modeller, r *sql.Rows) bool {
 	// Get the fields of the model and build a map of them
 	//t := reflect.TypeOf(*m)
 	mdl := reflect.New(s).Interface().(Modeller)
+	db.mu.RLock()
 	flds, ok := db.tableDef[GetTableName(mdl)]
+	db.mu.RUnlock()
 	if !ok {
 		return false
 	}
@@ -547,13 +553,18 @@ func (db *DB) executeQuery(q string, tx ...*sql.Tx) error {
 // @param t
 // @return bool
 func (db *DB) tableExists(t string) bool {
+	db.mu.RLock()
 	if slices.Contains(db.knownTables, t) {
+		db.mu.RUnlock()
 		return true
 	}
+	db.mu.RUnlock()
 
 	qry := db.mgr.TableExistsQuery(t)
 	if _, ok := db.selectScalar(qry); ok {
+		db.mu.Lock()
 		db.knownTables = append(db.knownTables, t)
+		db.mu.Unlock()
 		return true
 	}
 	return false
@@ -878,7 +889,9 @@ func (db *DB) tableTest(m Modeller) ([]field, string, error) {
 	sql, reqd := db.tableDefinition(m)
 	if reqd {
 		te := db.tableExists(n)
+		db.mu.Lock()
 		db.knownTables = append(db.knownTables, n)
+		db.mu.Unlock()
 		if !te {
 			for _, s := range sql {
 				if err := db.executeQuery(s); err != nil {
@@ -892,7 +905,9 @@ func (db *DB) tableTest(m Modeller) ([]field, string, error) {
 			}
 		}
 	}
+	db.mu.RLock()
 	flds, ok := db.tableDef[n]
+	db.mu.RUnlock()
 	if !ok {
 		return nil, "", errors.New("table definition not found")
 	}
@@ -1010,9 +1025,12 @@ func (db *DB) tableDefinition(m Modeller) ([]string, bool) {
 	sql := make([]string, 0, 3)
 
 	n := GetTableName(m)
+	db.mu.RLock()
 	if _, ok := db.tableDef[n]; ok {
+		db.mu.RUnlock()
 		return nil, false
 	}
+	db.mu.RUnlock()
 
 	t := reflect.TypeOf(m)
 	var nm interface{}
@@ -1023,7 +1041,16 @@ func (db *DB) tableDefinition(m Modeller) ([]string, bool) {
 	}
 	flds := getDefs(nm, true)
 
+	// Double-check under the write lock so only one goroutine records the
+	// definition for this table. This prevents duplicate table-creation work
+	// when multiple goroutines race to define the same model.
+	db.mu.Lock()
+	if _, ok := db.tableDef[n]; ok {
+		db.mu.Unlock()
+		return nil, false
+	}
 	db.tableDef[n] = flds
+	db.mu.Unlock()
 	if len(flds) == 0 {
 		return nil, false
 	}
@@ -1103,4 +1130,8 @@ func Range[T Modeller](db *DB, criteria ...interface{}) iter.Seq[*T] {
 
 func FromID[T Modeller](db *DB, id string) (*T, error) {
 	return First[T](db, where.Equal("ID", id))
+}
+
+func (db *DB) Connection() *sql.DB {
+	return db.db
 }
