@@ -75,12 +75,17 @@ func New(config *Config) (*DB, error) {
 }
 
 func (db *DB) SqlDB() *sql.DB {
+	db.mu.RLock()
+	defer db.mu.RUnlock()
 	return db.db
 }
 
 func (db *DB) Close() {
+	db.mu.Lock()
+	defer db.mu.Unlock()
 	if db.db != nil {
 		db.disconnect(db.db)
+		db.db = nil
 	}
 }
 
@@ -360,7 +365,7 @@ func (db *DB) populateModel(m Modeller, r *sql.Rows) ([]Modeller, bool) {
 	return res[:rowCount], ok
 }
 
-func (db *DB) populateSingle(m Modeller, r *sql.Rows) bool {
+func (db *DB) populateSingle(m Modeller, r *sql.Rows) (Modeller, bool) {
 	s := reflect.TypeOf(m)
 	ok := true
 
@@ -379,7 +384,7 @@ func (db *DB) populateSingle(m Modeller, r *sql.Rows) bool {
 	flds, ok := db.tableDef[GetTableName(mdl)]
 	db.mu.RUnlock()
 	if !ok {
-		return false
+		return nil, false
 	}
 	fMap := make(map[string]field, len(flds))
 	for _, f := range flds {
@@ -494,14 +499,12 @@ func (db *DB) populateSingle(m Modeller, r *sql.Rows) bool {
 				}
 			}
 		}
-
 	}
 	newObj := v.Elem().Interface().(Modeller)
 	db.doRestore(newObj)
-	mdl = newObj
-	//	}
-	return ok
+	return newObj, ok
 }
+
 func (db *DB) doRestore(m Modeller) {
 	if r, ok := m.(Restorer); ok {
 		r.Restore(db.mgr)
@@ -567,7 +570,9 @@ func (db *DB) tableExists(t string) bool {
 	qry := db.mgr.TableExistsQuery(t)
 	if _, ok := db.selectScalar(qry); ok {
 		db.mu.Lock()
-		db.knownTables = append(db.knownTables, t)
+		if !slices.Contains(db.knownTables, t) {
+			db.knownTables = append(db.knownTables, t)
+		}
 		db.mu.Unlock()
 		return true
 	}
@@ -720,8 +725,10 @@ func (db *DB) Range(mdl Modeller, criteria ...interface{}) iter.Seq[Modeller] {
 		}
 		defer res.Close()
 		for res.Next() {
-			r := reflect.New(reflect.TypeOf(mdl).Elem()).Interface().(Modeller)
-			db.populateSingle(r, res)
+			r, ok := db.populateSingle(mdl, res)
+			if !ok {
+				continue
+			}
 			if !yield(r) {
 				return
 			}
@@ -893,9 +900,6 @@ func (db *DB) tableTest(m Modeller) ([]field, string, error) {
 	sql, reqd := db.tableDefinition(m)
 	if reqd {
 		te := db.tableExists(n)
-		db.mu.Lock()
-		db.knownTables = append(db.knownTables, n)
-		db.mu.Unlock()
 		if !te {
 			for _, s := range sql {
 				if err := db.executeQuery(s); err != nil {
@@ -1036,6 +1040,12 @@ func (db *DB) tableDefinition(m Modeller) ([]string, bool) {
 	}
 	db.mu.RUnlock()
 
+	db.mu.Lock()
+	defer db.mu.Unlock()
+	if _, ok := db.tableDef[n]; ok {
+		return nil, false
+	}
+
 	t := reflect.TypeOf(m)
 	var nm interface{}
 	if t.Kind() == reflect.Ptr {
@@ -1044,17 +1054,7 @@ func (db *DB) tableDefinition(m Modeller) ([]string, bool) {
 		nm = reflect.New(t).Elem().Interface()
 	}
 	flds := getDefs(nm, true)
-
-	// Double-check under the write lock so only one goroutine records the
-	// definition for this table. This prevents duplicate table-creation work
-	// when multiple goroutines race to define the same model.
-	db.mu.Lock()
-	if _, ok := db.tableDef[n]; ok {
-		db.mu.Unlock()
-		return nil, false
-	}
 	db.tableDef[n] = flds
-	db.mu.Unlock()
 	if len(flds) == 0 {
 		return nil, false
 	}
@@ -1137,5 +1137,7 @@ func FromID[T Modeller](db *DB, id string) (*T, error) {
 }
 
 func (db *DB) Connection() *sql.DB {
+	db.mu.RLock()
+	defer db.mu.RUnlock()
 	return db.db
 }
