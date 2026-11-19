@@ -18,5 +18,9 @@ type Restorer interface {
 	Restore(mgr Manager) error
 }
 
-// Remover defines the interface for objects that can be removed from the database.
-type Remover interface{}
+// Tabler defines the interface for models that provide a custom table name.
+// When implemented and non-empty, the returned name is used for all table
+// operations instead of the derived struct type name.
+type Tabler interface {
+	TableName() string
+}

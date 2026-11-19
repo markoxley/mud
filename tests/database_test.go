@@ -45,10 +45,18 @@ func getConfig(dbType string) *mud.Config {
 	panic("Invalid database type")
 }
 
-func getDB(dbType string) *mud.DB {
+func getDB(t *testing.T, dbType string) *mud.DB {
+	t.Helper()
 	config := getConfig(dbType)
-	db, _ := mud.New(config)
-	db.RawExecute("Delete from TestModel")
+	db, err := mud.New(config)
+	if err != nil {
+		t.Skipf("database %s unavailable: %v", dbType, err)
+	}
+	if err := db.SqlDB().Ping(); err != nil {
+		db.Close()
+		t.Skipf("database %s unreachable: %v", dbType, err)
+	}
+	db.RawExecute("Delete from test_models", nil)
 	return db
 }
 
@@ -122,7 +130,7 @@ func TestNew(t *testing.T) {
 }
 
 func TestSaveAndFetchSQLite(t *testing.T) {
-	db := getDB("sqlite")
+	db := getDB(t, "sqlite")
 	defer db.Close()
 	// Create test model
 	model := &TestModel{
@@ -154,7 +162,7 @@ func TestSaveAndFetchMSSQL(t *testing.T) {
 	if runtime.GOOS != "windows" {
 		t.Skip("Skipping MSSQL test on Linux")
 	}
-	db := getDB("mssql")
+	db := getDB(t, "mssql")
 	defer db.Close()
 	// Create test model
 	model := &TestModel{
@@ -185,7 +193,7 @@ func TestSaveAndFetchMySQL(t *testing.T) {
 	if runtime.GOOS == "windows" {
 		t.Skip("Skipping MySQL test on Windows")
 	}
-	db := getDB("mysql")
+	db := getDB(t, "mysql")
 	defer db.Close()
 	// Create test model
 	model := &TestModel{
@@ -213,7 +221,7 @@ func TestSaveAndFetchMySQL(t *testing.T) {
 	assert.Equal(t, model.Age, fetchedModel.Age)
 }
 func TestRemoveSQLite(t *testing.T) {
-	db := getDB("sqlite")
+	db := getDB(t, "sqlite")
 	defer db.Close()
 
 	// Create and save test model
@@ -239,7 +247,7 @@ func TestRemoveMSSQL(t *testing.T) {
 	if runtime.GOOS != "windows" {
 		t.Skip("Skipping MSSQL test on Linux")
 	}
-	db := getDB("mssql")
+	db := getDB(t, "mssql")
 	defer db.Close()
 
 	// Create and save test model
@@ -264,7 +272,7 @@ func TestRemoveMySQL(t *testing.T) {
 	if runtime.GOOS == "windows" {
 		t.Skip("Skipping MySQL test on Windows")
 	}
-	db := getDB("mysql")
+	db := getDB(t, "mysql")
 	defer db.Close()
 
 	// Create and save test model
@@ -286,7 +294,7 @@ func TestRemoveMySQL(t *testing.T) {
 	db.Close()
 }
 func TestCountSQLite(t *testing.T) {
-	db := getDB("sqlite")
+	db := getDB(t, "sqlite")
 	defer db.Close()
 
 	// Create test models
@@ -322,7 +330,7 @@ func TestCountMSSQL(t *testing.T) {
 	if runtime.GOOS != "windows" {
 		t.Skip("Skipping MSSQL test on Linux")
 	}
-	db := getDB("mssql")
+	db := getDB(t, "mssql")
 	defer db.Close()
 
 	// Create test models
@@ -358,7 +366,7 @@ func TestCountMySQL(t *testing.T) {
 	if runtime.GOOS == "windows" {
 		t.Skip("Skipping MySQL test on Windows")
 	}
-	db := getDB("mysql")
+	db := getDB(t, "mysql")
 	defer db.Close()
 
 	// Create test models
@@ -391,7 +399,7 @@ func TestCountMySQL(t *testing.T) {
 }
 
 func TestFirstSQLite(t *testing.T) {
-	db := getDB("sqlite")
+	db := getDB(t, "sqlite")
 	defer db.Close()
 
 	// Create test models
@@ -437,7 +445,7 @@ func TestConcurrentFetchSaveSQLite(t *testing.T) {
 	// Go-level table-definition cache access to run concurrently across
 	// goroutines, which is what this test is verifying.
 	db.Connection().SetMaxOpenConns(1)
-	db.RawExecute("DROP TABLE IF EXISTS concurrent_models")
+	db.RawExecute("DROP TABLE IF EXISTS concurrent_models", nil)
 
 	// Use a cold model type so its table definition is not yet cached. All
 	// goroutines start simultaneously via the barrier, forcing them to race
@@ -473,7 +481,7 @@ func TestFirstMSSQL(t *testing.T) {
 	if runtime.GOOS == "windows" {
 		t.Skip("Skipping MSSQL test on Windows")
 	}
-	db := getDB("mssql")
+	db := getDB(t, "mssql")
 	defer db.Close()
 
 	// Create test models
@@ -500,7 +508,7 @@ func TestFirstMSSQL(t *testing.T) {
 
 func TestFirstMySQL(t *testing.T) {
 
-	db := getDB("mysql")
+	db := getDB(t, "mysql")
 	defer db.Close()
 
 	// Create test models

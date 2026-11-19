@@ -8,12 +8,15 @@ package where
 // Implementations of this interface are responsible for generating SQL clauses
 // and managing logical conjunctions between conditions
 type clauser interface {
-	// String returns the SQL clause string representation
-	// The provided field names are used to construct the clause
+	// build returns the SQL clause string representation with placeholder
+	// markers instead of literal values, plus the ordered list of arguments
+	// to bind to those placeholders.
 	//
-	// @param fields List of field names to use in the clause
-	// @return SQL clause string
-	String([]string) string
+	// @param operators List of operator format strings to use in the clause
+	// @param ph Function that returns the next placeholder marker
+	// @param pos Counter used by numbered placeholders (e.g. @pN)
+	// @return SQL clause string and its bind arguments
+	build([]string, func(*int) string, *int) (string, []interface{})
 
 	// getConjunction returns the logical conjunction used to combine this clause
 	// with other clauses in a WHERE condition
@@ -21,4 +24,3 @@ type clauser interface {
 	// @return The conjunction used for combining clauses
 	getConjunction() conjunction
 }
-

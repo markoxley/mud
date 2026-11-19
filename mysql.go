@@ -63,6 +63,16 @@ func (m *MySQLManager) IdentityString(f string) string {
 	return fmt.Sprintf("`%s`", f)
 }
 
+// Placeholder returns the MySQL parameter placeholder ("?"). The pos parameter
+// is accepted for interface compatibility; MySQL placeholders are positional
+// and not numbered.
+func (m *MySQLManager) Placeholder(pos *int) string {
+	if pos != nil {
+		*pos++
+	}
+	return "?"
+}
+
 // TableCreate returns the MySQL table creation query template.
 // The template includes IF NOT EXISTS to prevent duplicate table creation errors.
 func (m *MySQLManager) TableCreate() string {
@@ -86,9 +96,10 @@ func (m *MySQLManager) BuildQuery(where string, order string, limit string, offs
 	return res + limit + offset
 }
 
-// TableExistsQuery generates a query to check if a table exists in the database.
-func (m *MySQLManager) TableExistsQuery(name string) string {
-	return fmt.Sprintf("SHOW TABLES WHERE Tables_in_%s = '%s'", m.dbName, name)
+// TableExistsQuery generates a parameterized query to check if a table exists in the database.
+func (m *MySQLManager) TableExistsQuery(name string) (string, []interface{}) {
+	return "SELECT TABLE_NAME FROM INFORMATION_SCHEMA.TABLES WHERE TABLE_SCHEMA = ? AND TABLE_NAME = ?",
+		[]interface{}{m.dbName, name}
 }
 
 // Operators returns a list of MySQL compatible operator formats for query building.

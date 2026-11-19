@@ -33,27 +33,63 @@ func (c *Builder) Count() int {
 	return len(c.children)
 }
 
-// String returns the string version of the clause
+// Build returns the parameterized version of the clause.
+// All values are emitted as placeholder markers via the ph function and
+// returned separately in the args slice so they can be bound safely by the
+// database driver instead of being interpolated into the SQL text.
+//
 // @receiver c
-// @return string
-func (c *Builder) String(operators []string) string {
+// @param operators List of operator format strings to use in the clause
+// @param ph Function that returns the next placeholder marker
+// @return string The SQL clause with placeholder markers
+// @return []interface{} The ordered arguments to bind to the placeholders
+func (c *Builder) Build(operators []string, ph func(*int) string) (string, []interface{}) {
+	pos := 1
+	return c.BuildAt(operators, ph, &pos)
+}
 
+// BuildAt is like Build but lets the caller seed and own the placeholder
+// position counter. This is needed when the clause forms part of a larger
+// statement that already consumed earlier positions (e.g. @pN in SQL Server).
+//
+// @receiver c
+// @param operators List of operator format strings to use in the clause
+// @param ph Function that returns the next placeholder marker
+// @param pos Counter used by numbered placeholders
+// @return string The SQL clause with placeholder markers
+// @return []interface{} The ordered arguments to bind to the placeholders
+func (c *Builder) BuildAt(operators []string, ph func(*int) string, pos *int) (string, []interface{}) {
 	result := ""
+	args := make([]interface{}, 0, len(c.children))
 	for _, child := range c.children {
 		if result != "" {
 			result += string(child.getConjunction())
 		}
 
-		value := child.String(operators)
+		value, childArgs := child.build(operators, ph, pos)
 		if _, ok := child.(*Builder); ok {
 			value = fmt.Sprintf("(%s)", value)
 		}
 		if value == "" {
-			return ""
+			return "", nil
 		}
 		result += value
+		args = append(args, childArgs...)
 	}
-	return result
+	return result, args
+}
+
+// build implements the clauser interface so a Builder can be nested inside
+// another Builder as a sub-clause.
+//
+// @receiver c
+// @param operators List of operator format strings to use in the clause
+// @param ph Function that returns the next placeholder marker
+// @param pos Counter used by numbered placeholders
+// @return string The SQL clause with placeholder markers
+// @return []interface{} The ordered arguments to bind to the placeholders
+func (c *Builder) build(operators []string, ph func(*int) string, pos *int) (string, []interface{}) {
+	return c.BuildAt(operators, ph, pos)
 }
 
 // getConjunction
@@ -542,4 +578,3 @@ func (c *Builder) OrNotBetween(field string, value1 interface{}, value2 interfac
 	c.children = append(c.children, newClause(conOr, field, opBetween, true, value1, value2))
 	return c
 }
-

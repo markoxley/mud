@@ -8,7 +8,12 @@ import (
 	"reflect"
 	"strconv"
 	"strings"
+	"time"
 )
+
+// timeType is the reflect type of time.Time, used to distinguish datetime
+// fields from nested model structs.
+var timeType = reflect.TypeOf(time.Time{})
 
 // Modeller defines the interface for database model objects.
 // Any struct that implements this interface can be used as a database model.
@@ -28,8 +33,9 @@ type Modeller interface {
 	// This is used for soft deletion support.
 	IsDeleted() bool
 
-	// Disable marks the model as deleted (soft deletion).
-	// Disable()
+	// Note: Disable is intentionally not part of this interface. It is
+	// defined on *Model, and requiring it here would exclude models used
+	// by value (model values are created internally during Fetch).
 }
 
 // getDefs extracts field definitions from a struct using reflection.
@@ -74,17 +80,29 @@ func getDefs(t interface{}, first bool) []field {
 	nf := v.NumField()
 	for i := 0; i < nf; i++ {
 		st := ft.Field(i)
+		// Skip unexported fields: they cannot be populated by reflection
+		// and sv.Interface() would panic on them.
+		if !st.IsExported() {
+			continue
+		}
 		sv := v.Field(i)
 		null := false
 
-		// Handle pointer fields
+		// Handle pointer fields. When the pointer is nil, use a zero value
+		// of the declared element type so the kind and any nested-struct
+		// recursion still work.
 		if sv.Kind() == reflect.Ptr {
 			null = true
-			sv = sv.Elem()
+			if sv.IsNil() {
+				sv = reflect.New(sv.Type().Elem()).Elem()
+			} else {
+				sv = sv.Elem()
+			}
 		}
+		kind := sv.Kind()
 
 		// Handle nested structs (except time.Time)
-		if sv.Kind() == reflect.Struct && sv.Type().Name() != "Time" {
+		if kind == reflect.Struct && sv.Type() != timeType {
 			if subf := getDefs(sv.Interface(), false); len(subf) > 0 {
 				res = append(res, subf...)
 			}
@@ -103,10 +121,10 @@ func getDefs(t interface{}, first bool) []field {
 			FieldSearchLoop:
 				for k, v := range fieldTrans {
 					for _, v2 := range v {
-						if v2 == sv.Kind() {
+						if v2 == kind {
 							fld = k
 							for _, sn := range fieldUnsigned {
-								if sn == sv.Kind() {
+								if sn == kind {
 									uns = true
 								}
 							}
@@ -115,27 +133,40 @@ func getDefs(t interface{}, first bool) []field {
 					}
 				}
 
-				// Parse field tags
+				// Parse field tags. Note the size decimal component may
+				// appear as a separate token because the tag is comma
+				// separated (e.g. `size:10,2`), so look ahead for it.
 				if tg != "" {
 					tgs := strings.Split(tg, ",")
-					for _, t := range tgs {
-						pts := strings.Split(t, ":")
+					for j := 0; j < len(tgs); j++ {
+						pts := strings.SplitN(strings.TrimSpace(tgs[j]), ":", 2)
+						if len(pts) == 0 {
+							continue
+						}
 
 						switch pts[0] {
 						case "type":
+							if len(pts) < 2 {
+								continue
+							}
 							typeKey := pts[1]
 							if typeKey == "time" {
-								typeKey = "struct"
+								typeKey = sStruct
 							}
 							if v, ok := fieldNames[typeKey]; ok {
 								fld = v
 							}
 						case "size":
-							szPt := strings.Split(pts[1], ",")
-							if v, err := strconv.ParseInt(szPt[0], 10, 64); err == nil {
+							if len(pts) < 2 {
+								continue
+							}
+							if v, err := strconv.ParseInt(pts[1], 10, 64); err == nil {
 								szMj = int(v)
-								if len(szPt) > 1 {
-									if v, err = strconv.ParseInt(szPt[1], 10, 64); err == nil {
+								// Decimal places may have been split into
+								// the next comma-separated token.
+								if j+1 < len(tgs) && isDigits(tgs[j+1]) {
+									j++
+									if v, err = strconv.ParseInt(tgs[j], 10, 64); err == nil {
 										szMn = int(v)
 									}
 								}
@@ -155,4 +186,17 @@ func getDefs(t interface{}, first bool) []field {
 		}
 	}
 	return res
+}
+
+// isDigits reports whether s consists only of ASCII digits.
+func isDigits(s string) bool {
+	if s == "" {
+		return false
+	}
+	for _, r := range s {
+		if r < '0' || r > '9' {
+			return false
+		}
+	}
+	return true
 }

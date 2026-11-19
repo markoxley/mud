@@ -27,26 +27,34 @@ type Criteria struct {
 	IncDeleted bool
 }
 
-// WhereString returns the WHERE condition in SQL format.
-// It converts the criteria's Where condition into a properly formatted SQL WHERE clause.
+// WhereClause returns the WHERE condition in parameterized SQL format along
+// with the ordered list of arguments to bind to its placeholders.
+// Where conditions built with a where.Builder emit placeholder markers; a
+// Where supplied as a raw string is passed through verbatim as an explicit
+// escape hatch.
 // Parameters:
 //
 //	mgr: The database manager used to format the WHERE condition
 //
 // Returns:
 //
-//	A string containing the SQL WHERE clause
-func (c Criteria) WhereString(mgr Manager) string {
-	// if c.Where == nil {
-	// 	return ""
-	// }
+//	A string containing the SQL WHERE clause and its bind arguments
+func (c Criteria) WhereClause(mgr Manager) (string, []interface{}) {
+	return c.whereClause(mgr, nil)
+}
+
+// whereClause is WhereClause with an optional placeholder position counter.
+// A nil counter starts numbering at 1; pass a seeded counter when earlier
+// placeholders in the same statement have already been consumed.
+func (c Criteria) whereClause(mgr Manager, pos *int) (string, []interface{}) {
 	wh := ""
+	var args []interface{}
 	whereDone := false
 	if c.Where != nil {
 		if b, ok := c.Where.(*where.Builder); ok {
-			wh = b.String(mgr.Operators())
+			wh, args = b.BuildAt(mgr.Operators(), mgr.Placeholder, seededPos(pos))
 		} else if b, ok := c.Where.(where.Builder); ok {
-			wh = b.String(mgr.Operators())
+			wh, args = b.BuildAt(mgr.Operators(), mgr.Placeholder, seededPos(pos))
 		} else if w, ok := c.Where.(string); ok {
 			wh = w
 		}
@@ -64,7 +72,7 @@ func (c Criteria) WhereString(mgr Manager) string {
 		}
 		wh += fmt.Sprintf(" %s IS NULL", mgr.IdentityString("DeleteDate"))
 	}
-	return wh
+	return wh, args
 }
 
 // OrderString returns the ORDER BY condition in SQL format.
@@ -109,9 +117,21 @@ func (c Criteria) OffsetString(mgr Manager) string {
 	return mgr.OffsetString(&c)
 }
 
-// String returns the full criteria in SQL format
+// Build returns the full criteria in parameterized SQL format along with the
+// ordered list of arguments to bind to the WHERE clause placeholders.
 // @receiver c
 // @return string
-func (c Criteria) String(mgr Manager) string {
-	return mgr.BuildQuery(c.WhereString(mgr), c.OrderString(mgr), c.LimitString(mgr), c.OffsetString(mgr))
+// @return []interface{}
+func (c Criteria) Build(mgr Manager) (string, []interface{}) {
+	where, args := c.WhereClause(mgr)
+	return mgr.BuildQuery(where, c.OrderString(mgr), c.LimitString(mgr), c.OffsetString(mgr)), args
+}
+
+// seededPos returns pos as-is when provided, or a fresh counter starting at 1.
+func seededPos(pos *int) *int {
+	if pos != nil {
+		return pos
+	}
+	p := 1
+	return &p
 }

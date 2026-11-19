@@ -63,7 +63,13 @@ Models in Mud are Go structs that implement the `Modeller` interface. The easies
 
 ### Basic Model Structure
 
-Mud uses the **struct name** as the table name.
+By default, Mud uses the **struct name** as the table name. You can override
+it by implementing a `TableName() string` method on the model, or by calling
+`SetTableName` on the embedded `mud.Model`:
+
+```go
+func (t *User) TableName() string { return "users" }
+```
 
 ```go
 type User struct {
@@ -292,15 +298,22 @@ db.CommitTransaction(tx)
 
 ### Raw SQL
 
-For complex operations not supported by the query builder.
+For complex operations not supported by the query builder. All raw methods
+accept a slice of arguments which are bound safely as query parameters —
+always prefer them over interpolating values into the SQL string.
 
 ```go
 // Execute non-query (UPDATE, DELETE, etc.)
-err := db.RawExecute("UPDATE users SET legacy = 1 WHERE created_at < '2020-01-01'")
+err := db.RawExecute("UPDATE users SET legacy = ? WHERE created_at < ?", []interface{}{1, "2020-01-01"})
 
 // Query for results (returns []map[string]interface{})
-results, err := db.RawSelect("SELECT count(*) as cnt, status FROM users GROUP BY status")
+results, err := db.RawSelect("SELECT count(*) as cnt, status FROM users GROUP BY status", nil)
+
+// Scalar queries also take bind arguments
+val, ok := db.RawScalar("SELECT count(*) FROM users WHERE status = ?", []interface{}{"active"})
 ```
+
+_Note: SQL Server uses `@p1`, `@p2`, ... placeholders instead of `?`._
 
 ### Schema Management
 

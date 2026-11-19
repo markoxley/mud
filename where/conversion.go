@@ -19,7 +19,7 @@ func convertToInterfaceArray(values interface{}) []interface{} {
 	}
 	v := reflect.ValueOf(values)
 	if v.Kind() != reflect.Slice && v.Kind() != reflect.Array {
-		for v.Kind() == reflect.Pointer {
+		if v.Kind() == reflect.Pointer {
 			newValue := getValue(values)
 			if newValue == nil {
 				return nil
@@ -48,12 +48,11 @@ func getValue(value interface{}) interface{} {
 		return nil
 	}
 	v := reflect.ValueOf(value)
-	if v.Kind() == reflect.Pointer {
+	for v.Kind() == reflect.Pointer {
 		if v.IsNil() {
 			return nil
 		}
-		return v.Elem().Interface()
+		v = v.Elem()
 	}
-	return value
+	return v.Interface()
 }
-

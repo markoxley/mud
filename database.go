@@ -33,8 +33,11 @@ type DB struct {
 	mgr              Manager
 	db               *sql.DB
 	mu               sync.RWMutex
-	knownTables      []string
-	tableDef         map[string][]field
+	// createMu serializes table creation: the definition is cached before
+	// the CREATE statement runs, so concurrent callers must wait for it.
+	createMu    sync.Mutex
+	knownTables []string
+	tableDef    map[string][]field
 }
 
 func New(config *Config) (*DB, error) {
@@ -142,9 +145,10 @@ func (db *DB) BeginTransaction() (*sql.Tx, error) {
 // selectScalar atempts to execute the specified query and returns
 // the value of the first column of the first row
 // @param q
+// @param args
 // @return interface{}
 // @return bool
-func (db *DB) selectScalar(q string, tx ...*sql.Tx) (interface{}, bool) {
+func (db *DB) selectScalar(q string, args []interface{}, tx ...*sql.Tx) (interface{}, bool) {
 	var qtx *sql.Tx
 	var err error
 	if db.dbtype != "sqlite" {
@@ -160,9 +164,9 @@ func (db *DB) selectScalar(q string, tx ...*sql.Tx) (interface{}, bool) {
 	}
 	var res *sql.Rows
 	if qtx != nil {
-		res, err = qtx.Query(q)
+		res, err = qtx.Query(q, args...)
 	} else {
-		res, err = db.db.Query(q)
+		res, err = db.db.Query(q, args...)
 	}
 	if err != nil {
 		return nil, false
@@ -181,9 +185,10 @@ func (db *DB) selectScalar(q string, tx ...*sql.Tx) (interface{}, bool) {
 // selectQuery attempts to execute the query passed, returning
 // a slice of the type specified by the type parameter
 // @param q
+// @param args
 // @return []*T
 // @return bool
-func (db *DB) selectQuery(m Modeller, q string, tx ...*sql.Tx) ([]Modeller, bool) {
+func (db *DB) selectQuery(m Modeller, q string, args []interface{}, tx ...*sql.Tx) ([]Modeller, bool) {
 	var qtx *sql.Tx
 	var err error
 	if db.dbtype != "sqlite" {
@@ -199,9 +204,9 @@ func (db *DB) selectQuery(m Modeller, q string, tx ...*sql.Tx) ([]Modeller, bool
 	}
 	var res *sql.Rows
 	if qtx != nil {
-		res, err = qtx.Query(q)
+		res, err = qtx.Query(q, args...)
 	} else {
-		res, err = db.db.Query(q)
+		res, err = db.db.Query(q, args...)
 	}
 	if err != nil {
 		return nil, false
@@ -219,10 +224,12 @@ func (db *DB) populateModel(m Modeller, r *sql.Rows) ([]Modeller, bool) {
 	s := reflect.TypeOf(m)
 
 	res := make([]Modeller, 0, 100)
-	ok := true
 
-	// Get the column count
-	cc, _ := r.Columns()
+	// Get the column names
+	cc, err := r.Columns()
+	if err != nil {
+		return nil, false
+	}
 
 	// Make them all uppercase
 	for i := range cc {
@@ -230,7 +237,6 @@ func (db *DB) populateModel(m Modeller, r *sql.Rows) ([]Modeller, bool) {
 	}
 
 	// Get the fields of the model and build a map of them
-	//t := reflect.TypeOf(*m)
 	mdl := reflect.New(s).Interface().(Modeller)
 	db.mu.RLock()
 	flds, ok := db.tableDef[GetTableName(mdl)]
@@ -238,139 +244,36 @@ func (db *DB) populateModel(m Modeller, r *sql.Rows) ([]Modeller, bool) {
 	if !ok {
 		return nil, false
 	}
-	fMap := make(map[string]field, len(flds))
-	for _, f := range flds {
-		fMap[strings.ToUpper(f.name)] = f
-	}
+	fMap := fieldMap(flds)
 
 	cols := make([]*string, len(cc))
 	vls := make([]interface{}, len(cc))
+	for i := range cols {
+		vls[i] = &cols[i]
+	}
 
-	rowCount := 0
 	for r.Next() {
-		// s := reflect.TypeOf(m)
 		v := reflect.New(s)
 
-		for i := range cols {
-			vls[i] = &cols[i]
+		if err := r.Scan(vls...); err != nil {
+			return res, false
 		}
-		r.Scan(vls...)
-
-		for i := 0; i < len(cc); i++ {
-			if cols[i] == nil {
-				continue
-			}
-			if cc[i] == "ID" {
-				tmpID := cols[i]
-				v.Elem().FieldByName("ID").Set(reflect.ValueOf(tmpID))
-			} else if cc[i] == "CREATEDATE" {
-				if cols[i] != nil {
-					if tm, ok := utils.SQLToTime(*cols[i]); ok {
-						tmpCreate := *tm
-						v.Elem().FieldByName("CreateDate").Set(reflect.ValueOf(tmpCreate))
-					}
-				}
-			} else if cc[i] == "LASTUPDATE" {
-				if cols[i] != nil {
-					if tm, ok := utils.SQLToTime(*cols[i]); ok {
-						tmpUpdate := *tm
-						v.Elem().FieldByName("LastUpdate").Set(reflect.ValueOf(tmpUpdate))
-					}
-				}
-			} else if cc[i] == "DELETEDATE" {
-				if cols[i] != nil {
-					if tm, ok := utils.SQLToTime(*cols[i]); ok {
-						tmpDeleted := tm
-						v.Elem().FieldByName("DeleteDate").Set(reflect.ValueOf(tmpDeleted))
-					}
-				}
-			} else if fld, ok := fMap[cc[i]]; ok {
-				switch fld.fType {
-				case tInt, tLong:
-					if fld.unsigned {
-						if val, err := strconv.ParseUint(*cols[i], 10, 64); err != nil {
-							if fld.allowNull {
-								v.Elem().FieldByName(fld.name).Set(reflect.ValueOf(val))
-							} else {
-								v.Elem().FieldByName(fld.name).SetUint(val)
-							}
-						}
-					} else {
-						if val, err := strconv.ParseInt(*cols[i], 10, 64); err == nil {
-							if fld.allowNull {
-								v.Elem().FieldByName(fld.name).Set(reflect.ValueOf(val))
-							} else {
-								v.Elem().FieldByName(fld.name).SetInt(val)
-							}
-						}
-					}
-				case tBool:
-					if val, err := strconv.ParseInt(*cols[i], 10, 64); err == nil {
-						if fld.allowNull {
-							v.Elem().FieldByName(fld.name).Elem().SetBool(val == 1)
-						} else {
-							v.Elem().FieldByName(fld.name).SetBool(val == 1)
-						}
-					}
-				case tDecimal, tFloat, tDouble:
-					if val, err := strconv.ParseFloat(*cols[i], 64); err == nil {
-						if fld.allowNull {
-							v.Elem().FieldByName(fld.name).Set(reflect.ValueOf(val))
-						} else {
-							v.Elem().FieldByName(fld.name).SetFloat(val)
-						}
-					}
-				case tDateTime:
-					if cols[i] != nil {
-						if val, ok := utils.SQLToTime(*cols[i]); ok {
-							if fld.allowNull {
-								v.Elem().FieldByName(fld.name).Set(reflect.ValueOf(val))
-							} else {
-								v.Elem().FieldByName(fld.name).Set(reflect.ValueOf(*val))
-							}
-						}
-					}
-				case tChar:
-					st := *cols[i]
-					strVal := st[:1]
-					if fld.allowNull {
-						v.Elem().FieldByName(fld.name).Set(reflect.ValueOf(&strVal))
-					} else {
-						v.Elem().FieldByName(fld.name).SetString(strVal)
-					}
-				case tString:
-					if fld.allowNull {
-						strVal := *cols[i]
-						v.Elem().FieldByName(fld.name).Set(reflect.ValueOf(&strVal))
-					} else {
-						v.Elem().FieldByName(fld.name).SetString(*cols[i])
-					}
-				case tUUID:
-					if fld.allowNull {
-						strVal := *cols[i]
-						v.Elem().FieldByName(fld.name).Set(reflect.ValueOf(&strVal))
-					} else {
-						v.Elem().FieldByName(fld.name).SetString(*cols[i])
-					}
-				}
-			}
-
-		}
+		populateFields(v, cc, cols, fMap)
 		newObj := v.Elem().Interface().(Modeller)
 		db.doRestore(newObj)
 		res = append(res, newObj)
-		rowCount++
-
 	}
-	return res[:rowCount], ok
+	return res, true
 }
 
 func (db *DB) populateSingle(m Modeller, r *sql.Rows) (Modeller, bool) {
 	s := reflect.TypeOf(m)
-	ok := true
 
-	// Get the column count
-	cc, _ := r.Columns()
+	// Get the column names
+	cc, err := r.Columns()
+	if err != nil {
+		return nil, false
+	}
 
 	// Make them all uppercase
 	for i := range cc {
@@ -378,7 +281,6 @@ func (db *DB) populateSingle(m Modeller, r *sql.Rows) (Modeller, bool) {
 	}
 
 	// Get the fields of the model and build a map of them
-	//t := reflect.TypeOf(*m)
 	mdl := reflect.New(s).Interface().(Modeller)
 	db.mu.RLock()
 	flds, ok := db.tableDef[GetTableName(mdl)]
@@ -386,123 +288,145 @@ func (db *DB) populateSingle(m Modeller, r *sql.Rows) (Modeller, bool) {
 	if !ok {
 		return nil, false
 	}
+	fMap := fieldMap(flds)
+
+	cols := make([]*string, len(cc))
+	vls := make([]interface{}, len(cc))
+	for i := range cols {
+		vls[i] = &cols[i]
+	}
+	if err := r.Scan(vls...); err != nil {
+		return nil, false
+	}
+
+	v := reflect.New(s)
+	populateFields(v, cc, cols, fMap)
+	newObj := v.Elem().Interface().(Modeller)
+	db.doRestore(newObj)
+	return newObj, true
+}
+
+// fieldMap indexes field definitions by upper-cased column name.
+func fieldMap(flds []field) map[string]field {
 	fMap := make(map[string]field, len(flds))
 	for _, f := range flds {
 		fMap[strings.ToUpper(f.name)] = f
 	}
+	return fMap
+}
 
-	cols := make([]*string, len(cc))
-	vls := make([]interface{}, len(cc))
-
-	v := reflect.New(s)
-
-	for i := range cols {
-		vls[i] = &cols[i]
-	}
-	r.Scan(vls...)
-
+// populateFields copies the values scanned into cols into the freshly
+// allocated model pointed to by v.
+func populateFields(v reflect.Value, cc []string, cols []*string, fMap map[string]field) {
 	for i := 0; i < len(cc); i++ {
 		if cols[i] == nil {
 			continue
 		}
-		if cc[i] == "ID" {
-			tmpID := cols[i]
-			v.Elem().FieldByName("ID").Set(reflect.ValueOf(tmpID))
-		} else if cc[i] == "CREATEDATE" {
-			if cols[i] != nil {
-				if tm, ok := utils.SQLToTime(*cols[i]); ok {
-					tmpCreate := *tm
-					v.Elem().FieldByName("CreateDate").Set(reflect.ValueOf(tmpCreate))
-				}
+		switch cc[i] {
+		case "ID":
+			v.Elem().FieldByName("ID").Set(reflect.ValueOf(cols[i]))
+		case "CREATEDATE":
+			if tm, ok := utils.SQLToTime(*cols[i]); ok {
+				v.Elem().FieldByName("CreateDate").Set(reflect.ValueOf(*tm))
 			}
-		} else if cc[i] == "LASTUPDATE" {
-			if cols[i] != nil {
-				if tm, ok := utils.SQLToTime(*cols[i]); ok {
-					tmpUpdate := *tm
-					v.Elem().FieldByName("LastUpdate").Set(reflect.ValueOf(tmpUpdate))
-				}
+		case "LASTUPDATE":
+			if tm, ok := utils.SQLToTime(*cols[i]); ok {
+				v.Elem().FieldByName("LastUpdate").Set(reflect.ValueOf(*tm))
 			}
-		} else if cc[i] == "DELETEDATE" {
-			if cols[i] != nil {
-				if tm, ok := utils.SQLToTime(*cols[i]); ok {
-					tmpDeleted := tm
-					v.Elem().FieldByName("DeleteDate").Set(reflect.ValueOf(tmpDeleted))
-				}
+		case "DELETEDATE":
+			if tm, ok := utils.SQLToTime(*cols[i]); ok {
+				v.Elem().FieldByName("DeleteDate").Set(reflect.ValueOf(tm))
 			}
-		} else if fld, ok := fMap[cc[i]]; ok {
-			switch fld.fType {
-			case tInt, tLong:
-				if fld.unsigned {
-					if val, err := strconv.ParseUint(*cols[i], 10, 64); err != nil {
-						if fld.allowNull {
-							v.Elem().FieldByName(fld.name).Set(reflect.ValueOf(val))
-						} else {
-							v.Elem().FieldByName(fld.name).SetUint(val)
-						}
-					}
-				} else {
-					if val, err := strconv.ParseInt(*cols[i], 10, 64); err == nil {
-						if fld.allowNull {
-							v.Elem().FieldByName(fld.name).Set(reflect.ValueOf(val))
-						} else {
-							v.Elem().FieldByName(fld.name).SetInt(val)
-						}
-					}
-				}
-			case tBool:
-				if val, err := strconv.ParseInt(*cols[i], 10, 64); err == nil {
-					if fld.allowNull {
-						v.Elem().FieldByName(fld.name).Elem().SetBool(val == 1)
-					} else {
-						v.Elem().FieldByName(fld.name).SetBool(val == 1)
-					}
-				}
-			case tDecimal, tFloat, tDouble:
-				if val, err := strconv.ParseFloat(*cols[i], 64); err == nil {
-					if fld.allowNull {
-						v.Elem().FieldByName(fld.name).Set(reflect.ValueOf(val))
-					} else {
-						v.Elem().FieldByName(fld.name).SetFloat(val)
-					}
-				}
-			case tDateTime:
-				if cols[i] != nil {
-					if val, ok := utils.SQLToTime(*cols[i]); ok {
-						if fld.allowNull {
-							v.Elem().FieldByName(fld.name).Set(reflect.ValueOf(val))
-						} else {
-							v.Elem().FieldByName(fld.name).Set(reflect.ValueOf(*val))
-						}
-					}
-				}
-			case tChar:
-				st := *cols[i]
-				strVal := st[:1]
-				if fld.allowNull {
-					v.Elem().FieldByName(fld.name).Set(reflect.ValueOf(&strVal))
-				} else {
-					v.Elem().FieldByName(fld.name).SetString(strVal)
-				}
-			case tString:
-				if fld.allowNull {
-					strVal := *cols[i]
-					v.Elem().FieldByName(fld.name).Set(reflect.ValueOf(&strVal))
-				} else {
-					v.Elem().FieldByName(fld.name).SetString(*cols[i])
-				}
-			case tUUID:
-				if fld.allowNull {
-					strVal := *cols[i]
-					v.Elem().FieldByName(fld.name).Set(reflect.ValueOf(&strVal))
-				} else {
-					v.Elem().FieldByName(fld.name).SetString(*cols[i])
-				}
+		default:
+			if fld, ok := fMap[cc[i]]; ok {
+				setFieldValue(v.Elem(), fld, *cols[i])
 			}
 		}
 	}
-	newObj := v.Elem().Interface().(Modeller)
-	db.doRestore(newObj)
-	return newObj, ok
+}
+
+// setNullable assigns to the element of a pointer field, allocating the
+// pointer first if it is nil.
+func setNullable(fv reflect.Value, set func(reflect.Value)) {
+	if fv.IsNil() {
+		fv.Set(reflect.New(fv.Type().Elem()))
+	}
+	set(fv.Elem())
+}
+
+// setFieldValue parses the scanned string s and stores it in the field
+// named by fld, allocating pointer fields when fld.allowNull is set.
+func setFieldValue(e reflect.Value, fld field, s string) {
+	fv := e.FieldByName(fld.name)
+	if !fv.IsValid() || !fv.CanSet() {
+		return
+	}
+	switch fld.fType {
+	case tInt, tLong:
+		if fld.unsigned {
+			if val, err := strconv.ParseUint(s, 10, 64); err == nil {
+				if fld.allowNull {
+					setNullable(fv, func(e reflect.Value) { e.SetUint(val) })
+				} else {
+					fv.SetUint(val)
+				}
+			}
+		} else {
+			if val, err := strconv.ParseInt(s, 10, 64); err == nil {
+				if fld.allowNull {
+					setNullable(fv, func(e reflect.Value) { e.SetInt(val) })
+				} else {
+					fv.SetInt(val)
+				}
+			}
+		}
+	case tBool:
+		var b, parsed bool
+		if val, err := strconv.ParseInt(s, 10, 64); err == nil {
+			b, parsed = val == 1, true
+		} else if val, err := strconv.ParseBool(s); err == nil {
+			b, parsed = val, true
+		}
+		if parsed {
+			if fld.allowNull {
+				setNullable(fv, func(e reflect.Value) { e.SetBool(b) })
+			} else {
+				fv.SetBool(b)
+			}
+		}
+	case tDecimal, tFloat, tDouble:
+		if val, err := strconv.ParseFloat(s, 64); err == nil {
+			if fld.allowNull {
+				setNullable(fv, func(e reflect.Value) { e.SetFloat(val) })
+			} else {
+				fv.SetFloat(val)
+			}
+		}
+	case tDateTime:
+		if val, ok := utils.SQLToTime(s); ok {
+			if fld.allowNull {
+				setNullable(fv, func(e reflect.Value) { e.Set(reflect.ValueOf(*val)) })
+			} else {
+				fv.Set(reflect.ValueOf(*val))
+			}
+		}
+	case tChar:
+		strVal := ""
+		if r := []rune(s); len(r) > 0 {
+			strVal = string(r[:1])
+		}
+		if fld.allowNull {
+			setNullable(fv, func(e reflect.Value) { e.SetString(strVal) })
+		} else {
+			fv.SetString(strVal)
+		}
+	case tString, tUUID:
+		if fld.allowNull {
+			setNullable(fv, func(e reflect.Value) { e.SetString(s) })
+		} else {
+			fv.SetString(s)
+		}
+	}
 }
 
 func (db *DB) doRestore(m Modeller) {
@@ -522,10 +446,8 @@ func (db *DB) updateModel(m Modeller, id string, createdate time.Time, updatedat
 	createdateValue := reflect.ValueOf(createdate)
 	updatedateValue := reflect.ValueOf(updatedate)
 	deletedateValue := reflect.ValueOf(deletedate)
-	rv := reflect.New(reflect.TypeOf(id))
-	rv.Elem().Set(reflect.ValueOf(id))
 
-	v.Elem().FieldByName("ID").Set(rv)
+	v.Elem().FieldByName("ID").Set(reflect.ValueOf(&id))
 	v.Elem().FieldByName("CreateDate").Set(createdateValue)
 	v.Elem().FieldByName("LastUpdate").Set(updatedateValue)
 	v.Elem().FieldByName("DeleteDate").Set(deletedateValue)
@@ -533,8 +455,9 @@ func (db *DB) updateModel(m Modeller, id string, createdate time.Time, updatedat
 
 // executeQuery attempts to execute the passed sql query
 // @param q
+// @param args
 // @return bool
-func (db *DB) executeQuery(q string, tx ...*sql.Tx) error {
+func (db *DB) executeQuery(q string, args []interface{}, tx ...*sql.Tx) error {
 	var qtx *sql.Tx
 	var err error
 	if db.dbtype != "sqlite" {
@@ -549,9 +472,9 @@ func (db *DB) executeQuery(q string, tx ...*sql.Tx) error {
 		}
 	}
 	if qtx != nil {
-		_, err = qtx.Exec(q)
+		_, err = qtx.Exec(q, args...)
 	} else {
-		_, err = db.db.Exec(q)
+		_, err = db.db.Exec(q, args...)
 	}
 	return err
 }
@@ -567,8 +490,8 @@ func (db *DB) tableExists(t string) bool {
 	}
 	db.mu.RUnlock()
 
-	qry := db.mgr.TableExistsQuery(t)
-	if _, ok := db.selectScalar(qry); ok {
+	qry, qargs := db.mgr.TableExistsQuery(t)
+	if _, ok := db.selectScalar(qry, qargs); ok {
 		db.mu.Lock()
 		if !slices.Contains(db.knownTables, t) {
 			db.knownTables = append(db.knownTables, t)
@@ -587,25 +510,28 @@ func (db *DB) tableExists(t string) bool {
 // RawExecute executes a sql statement on the database, without returning a value
 // Not recommended for general use - can break shadowing
 // @param sql
+// @param args
 // @return bool
-func (db *DB) RawExecute(sql string, tx ...*sql.Tx) error {
-	return db.executeQuery(sql, tx...)
+func (db *DB) RawExecute(sql string, args []interface{}, tx ...*sql.Tx) error {
+	return db.executeQuery(sql, args, tx...)
 }
 
 // RawScalar exeutes a raw sql statement that returns a single value
 // Not recommended for general use
 // @param sql
+// @param args
 // @return interface{}
 // @return bool
-func (db *DB) RawScalar(sql string, tx ...*sql.Tx) (interface{}, bool) {
-	return db.selectScalar(sql, tx...)
+func (db *DB) RawScalar(sql string, args []interface{}, tx ...*sql.Tx) (interface{}, bool) {
+	return db.selectScalar(sql, args, tx...)
 }
 
 // RawSelect executes a raw sql statement on the database
 // Not recommended for general use
 // @param sql
+// @param args
 // @return []map
-func (db *DB) RawSelect(qry string, tx ...*sql.Tx) ([]map[string]interface{}, error) {
+func (db *DB) RawSelect(qry string, args []interface{}, tx ...*sql.Tx) ([]map[string]interface{}, error) {
 	var qtx *sql.Tx
 	var err error
 	if db.dbtype != "sqlite" {
@@ -621,9 +547,9 @@ func (db *DB) RawSelect(qry string, tx ...*sql.Tx) ([]map[string]interface{}, er
 	}
 	var res *sql.Rows
 	if qtx != nil {
-		res, err = qtx.Query(qry)
+		res, err = qtx.Query(qry, args...)
 	} else {
-		res, err = db.db.Query(qry)
+		res, err = db.db.Query(qry, args...)
 	}
 	if err != nil {
 		return nil, err
@@ -697,14 +623,14 @@ func (db *DB) Range(mdl Modeller, criteria ...interface{}) iter.Seq[Modeller] {
 		if err != nil {
 			return
 		}
-		t := reflect.TypeOf(mdl)
-		n := t.Name()
+		n := GetTableName(mdl)
 		_, _, err = db.tableTest(mdl)
 		if err != nil {
 			return
 		}
 		s := fmt.Sprintf("select * from %s", db.mgr.IdentityString(n))
-		s += c.String(db.mgr)
+		crit, args := c.Build(db.mgr)
+		s += crit
 
 		var qtx *sql.Tx
 		if !db.cfg.DisabledTransactions {
@@ -716,9 +642,9 @@ func (db *DB) Range(mdl Modeller, criteria ...interface{}) iter.Seq[Modeller] {
 		}
 		var res *sql.Rows
 		if qtx != nil {
-			res, err = qtx.Query(s)
+			res, err = qtx.Query(s, args...)
 		} else {
-			res, err = db.db.Query(s)
+			res, err = db.db.Query(s, args...)
 		}
 		if err != nil {
 			return
@@ -747,16 +673,16 @@ func (db *DB) Fetch(mdl Modeller, criteria ...interface{}) ([]Modeller, error) {
 		return nil, err
 	}
 
-	t := reflect.TypeOf(mdl)
-	n := t.Name()
+	n := GetTableName(mdl)
 	_, _, err = db.tableTest(mdl)
 	if err != nil {
 		return nil, err
 	}
 
 	s := fmt.Sprintf("SELECT * FROM %s", db.mgr.IdentityString(n))
-	s += c.String(db.mgr)
-	res, ok := db.selectQuery(mdl, s)
+	crit, args := c.Build(db.mgr)
+	s += crit
+	res, ok := db.selectQuery(mdl, s, args)
 	if !ok {
 		return nil, errors.New("error selecting data")
 	}
@@ -798,10 +724,13 @@ func (db *DB) Count(m Modeller, criteria ...interface{}) int {
 		return -1
 	}
 	s := fmt.Sprintf("Select Count(*) from %s", db.mgr.IdentityString(t))
+	var args []interface{}
 	if c != nil {
-		s += c.WhereString(db.mgr)
+		var where string
+		where, args = c.WhereClause(db.mgr)
+		s += where
 	}
-	if i, ok := db.selectScalar(s); ok {
+	if i, ok := db.selectScalar(s, args); ok {
 		if vl, vlok := i.(string); vlok {
 			if res, err := strconv.Atoi(vl); err == nil {
 				return res
@@ -812,22 +741,24 @@ func (db *DB) Count(m Modeller, criteria ...interface{}) int {
 
 }
 
-func (db *DB) insertCommand(m Modeller) (string, error) {
+func (db *DB) insertCommand(m Modeller) (string, []interface{}, error) {
 	//t := reflect.TypeOf(m)
 	//n := getTableName(m)
 	flds, n, err := db.tableTest(m)
 	if err != nil {
-		return "", err
+		return "", nil, err
 	}
 	uid := uuid.NewV4()
 
 	fds := "ID, CreateDate, LastUpdate"
 	now := time.Now()
 	db.updateModel(m, uid.String(), now, now, nil)
-	q := fmt.Sprintf("'%s', '%s', '%s'", uid, utils.TimeToSQL(now), utils.TimeToSQL(now))
+	pos := 1
+	q := db.mgr.Placeholder(&pos) + ", " + db.mgr.Placeholder(&pos) + ", " + db.mgr.Placeholder(&pos)
+	args := []interface{}{uid.String(), utils.TimeToSQL(now), utils.TimeToSQL(now)}
 	v := reflect.ValueOf(m)
 	for _, f := range flds {
-		if f.name == "ID" || f.name == "CreateDate" || f.name == "LastUpdate" || f.name == "DeleteDate" {
+		if f.identity || f.name == "ID" || f.name == "CreateDate" || f.name == "LastUpdate" || f.name == "DeleteDate" {
 			continue
 		}
 		vi := v.Elem().FieldByName(f.name)
@@ -841,53 +772,68 @@ func (db *DB) insertCommand(m Modeller) (string, error) {
 
 		vf := vi.Interface()
 
-		if vl, ok := utils.MakeValue(vf); ok {
+		if arg, ok := utils.MakeArg(vf); ok {
 			fds += fmt.Sprintf(", %s", db.mgr.IdentityString(f.name))
-			q += fmt.Sprintf(", %s", vl)
+			q += fmt.Sprintf(", %s", db.mgr.Placeholder(&pos))
+			args = append(args, arg)
 		}
 	}
 
 	def := fmt.Sprintf("INSERT INTO %s (%s) VALUES(%s)", db.mgr.IdentityString(n), fds, q)
-	return def, nil
+	return def, args, nil
 }
 
-// updateCommand returns the SQL command to update the
-// current model in the database
+// updateCommand returns the parameterized SQL command to update the
+// current model in the database, along with the arguments to bind
 // @param m
 // @return string
-func (db *DB) updateCommand(m Modeller) (string, error) {
+// @return []interface{}
+func (db *DB) updateCommand(m Modeller) (string, []interface{}, error) {
 	flds, n, err := db.tableTest(m)
 	if err != nil {
-		return "", err
+		return "", nil, err
 	}
 	now := time.Now()
 	db.updateLastUpdate(m, now)
-	res := fmt.Sprintf("UPDATE %s SET", n)
+	res := fmt.Sprintf("UPDATE %s SET", db.mgr.IdentityString(n))
 	v := reflect.ValueOf(m)
+	pos := 1
+	var args []interface{}
 	first := true
 	for _, f := range flds {
-		if f.name != "ID" && f.name != "CreateDate" {
-			if !first {
-				res += ","
-			}
-			first = false
+		if f.name == "ID" || f.name == "CreateDate" || f.identity {
+			continue
+		}
+		var assignment string
+		if f.allowNull && v.Elem().FieldByName(f.name).IsNil() {
+			assignment = fmt.Sprintf(" %s = null", db.mgr.IdentityString(f.name))
+		} else {
 			var value interface{}
 			if f.allowNull {
-				if v.Elem().FieldByName(f.name).IsNil() {
-					res += fmt.Sprintf(" %s = null", db.mgr.IdentityString(f.name))
-					continue
-				}
 				value = v.Elem().FieldByName(f.name).Elem().Interface()
 			} else {
 				value = v.Elem().FieldByName(f.name).Interface()
 			}
-			if vl, ok := utils.MakeValue(value); ok {
-				res += fmt.Sprintf(" %s = %s", db.mgr.IdentityString(f.name), vl)
+			if arg, ok := utils.MakeArg(value); ok {
+				assignment = fmt.Sprintf(" %s = %s", db.mgr.IdentityString(f.name), db.mgr.Placeholder(&pos))
+				args = append(args, arg)
 			}
 		}
+		if assignment == "" {
+			continue
+		}
+		if !first {
+			res += ","
+		}
+		first = false
+		res += assignment
 	}
-	def := res + fmt.Sprintf(" WHERE %s = '%s'", db.mgr.IdentityString("Id"), *m.GetID())
-	return def, nil
+	if first {
+		return "", nil, errors.New("no updatable fields")
+	}
+	def := res + fmt.Sprintf(" WHERE %s = %s", db.mgr.IdentityString("ID"), db.mgr.Placeholder(&pos))
+	args = append(args, *m.GetID())
+	return def, args, nil
 }
 
 func (db *DB) updateLastUpdate(m Modeller, date time.Time) {
@@ -897,19 +843,29 @@ func (db *DB) updateLastUpdate(m Modeller, date time.Time) {
 }
 func (db *DB) tableTest(m Modeller) ([]field, string, error) {
 	n := GetTableName(m)
+	// Serialize table creation: tableDefinition caches the definition
+	// before the CREATE statement runs, so without this lock a concurrent
+	// caller could proceed while the table does not yet exist.
+	db.createMu.Lock()
 	sql, reqd := db.tableDefinition(m)
-	if reqd {
-		te := db.tableExists(n)
-		if !te {
-			for _, s := range sql {
-				if err := db.executeQuery(s); err != nil {
-					return nil, "", err
-				}
+	created := false
+	if reqd && !db.tableExists(n) {
+		for _, s := range sql {
+			if err := db.executeQuery(s, nil); err != nil {
+				db.createMu.Unlock()
+				return nil, "", err
 			}
-			if sd := m.StandingData(); sd != nil {
-				for _, data := range sd {
-					db.Save(data)
-				}
+		}
+		created = true
+	}
+	db.createMu.Unlock()
+
+	// Seed standing data after releasing the creation lock: Save re-enters
+	// tableTest for the standing-data models.
+	if created {
+		for _, data := range m.StandingData() {
+			if err := db.Save(data); err != nil {
+				return nil, "", err
 			}
 		}
 	}
@@ -935,17 +891,17 @@ func (db *DB) Save(m Modeller, tx ...*sql.Tx) error {
 		}
 	}
 	if m.IsNew() {
-		cmd, err := db.insertCommand(m)
+		cmd, args, err := db.insertCommand(m)
 		if err != nil {
 			return err
 		}
-		return db.executeQuery(cmd)
+		return db.executeQuery(cmd, args)
 	}
-	updCmd, err := db.updateCommand(m)
+	updCmd, args, err := db.updateCommand(m)
 	if err != nil {
 		return err
 	}
-	return db.executeQuery(updCmd, tx...)
+	return db.executeQuery(updCmd, args, tx...)
 }
 
 // Remove removes the passed model from the database
@@ -959,51 +915,54 @@ func (db *DB) Remove(m Modeller, tx ...*sql.Tx) error {
 		Where: where.Equal("ID", *m.GetID()),
 	}
 	var s string
+	var args []interface{}
 	if db.cfg.Deletable {
-		s = db.massDelete(m, c)
+		s, args = db.massDelete(m, c)
 	} else {
-		s = db.massDisable(m, c)
+		s, args = db.massDisable(m, c)
 	}
-	return db.executeQuery(s, tx...)
+	return db.executeQuery(s, args, tx...)
 }
 
-func (db *DB) massDelete(m Modeller, c *Criteria) string {
+func (db *DB) massDelete(m Modeller, c *Criteria) (string, []interface{}) {
 	name := GetTableName(m)
 	s := fmt.Sprintf("DELETE FROM %s", db.mgr.IdentityString(name))
-	whereAdded := false
-
-	if c != nil && c.Where != "" {
-		s += fmt.Sprintf(" WHERE %s", c.WhereString(db.mgr))
-		whereAdded = true
+	var args []interface{}
+	if c != nil {
+		var where string
+		where, args = c.WhereClause(db.mgr)
+		if trimmed := strings.TrimSpace(where); trimmed != "" {
+			s += fmt.Sprintf(" %s", trimmed)
+		}
 	}
-	if whereAdded {
-		s += fmt.Sprintf(" AND %s IS NULL", db.mgr.IdentityString("[DeleteDate]"))
-	} else {
-		s += fmt.Sprintf(" WHERE %s IS NULL", db.mgr.IdentityString("[DeleteDate]"))
-	}
-	return s
+	return s, args
 }
 
-func (db *DB) massDisable(m Modeller, c *Criteria) string {
+func (db *DB) massDisable(m Modeller, c *Criteria) (string, []interface{}) {
 	tm := time.Now()
 	deleteDate := db.mgr.IdentityString("DeleteDate")
 	name := GetTableName(m)
-	s := fmt.Sprintf("UPDATE %s SET %s = '%v'", db.mgr.IdentityString(name), deleteDate, utils.TimeToSQL(tm))
+	pos := 2 // position 1 is used by the SET placeholder below
+	s := fmt.Sprintf("UPDATE %s SET %s = %s", db.mgr.IdentityString(name), deleteDate, db.mgr.Placeholder(nil))
+	args := []interface{}{utils.TimeToSQL(tm)}
 
-	whereAdded := false
-	if c != nil && c.Where != "" {
-		trimmed := strings.TrimSpace(c.WhereString(db.mgr))
-		if trimmed != "" {
+	if c != nil {
+		var where string
+		var wargs []interface{}
+		// MSSQL uses numbered placeholders (@pN); the SET clause already
+		// consumed @p1 so WHERE placeholders must start at @p2. For "?"
+		// placeholders the position is irrelevant.
+		if db.dbtype == "sqlserver" {
+			where, wargs = c.whereClause(db.mgr, &pos)
+		} else {
+			where, wargs = c.WhereClause(db.mgr)
+		}
+		if trimmed := strings.TrimSpace(where); trimmed != "" {
 			s += fmt.Sprintf(" %s", trimmed)
-			whereAdded = true
+			args = append(args, wargs...)
 		}
 	}
-	if whereAdded {
-		s += fmt.Sprintf(" AND %s IS NULL", deleteDate)
-	} else {
-		s += fmt.Sprintf(" WHERE %s IS NULL", deleteDate)
-	}
-	return s
+	return s, args
 }
 
 // RemoveMany removes all models of the specified type that match the criteria
@@ -1020,12 +979,13 @@ func (db *DB) RemoveMany(m Modeller, c *Criteria, tx ...*sql.Tx) (int, error) {
 		return 0, nil
 	}
 	s := ""
+	var args []interface{}
 	if db.cfg.Deletable {
-		s = db.massDelete(m, c)
+		s, args = db.massDelete(m, c)
 	} else {
-		s = db.massDisable(m, c)
+		s, args = db.massDisable(m, c)
 	}
-	err := db.executeQuery(s, tx...)
+	err := db.executeQuery(s, args, tx...)
 	return r, err
 }
 
@@ -1064,9 +1024,9 @@ func (db *DB) tableDefinition(m Modeller) ([]string, bool) {
 		if fldsStr != "" {
 			fldsStr += ", "
 		}
-		fldsStr += fmt.Sprintf("%s %s", db.mgr.IdentityString(f.name), pgFieldNames[f.fType])
+		fldsStr += fmt.Sprintf("%s %s", db.mgr.IdentityString(f.name), dbFieldTypes[f.fType])
 		if f.fType != tUUID && f.fType != tChar && f.size.Size > 0 {
-			fldsStr += fmt.Sprintf("(%d)", f.size.Size)
+			fldsStr += fmt.Sprintf("(%s)", f.size.String())
 		}
 		if f.fType == tString && f.size.Size == 0 {
 			fldsStr += "(256)"
@@ -1077,7 +1037,9 @@ func (db *DB) tableDefinition(m Modeller) ([]string, bool) {
 		if !f.allowNull {
 			fldsStr += " NOT NULL"
 		}
-		if f.key {
+		if f.identity {
+			fldsStr += " PRIMARY KEY"
+		} else if f.key {
 			keys = append(keys, f.name)
 		}
 	}

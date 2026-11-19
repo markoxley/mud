@@ -46,7 +46,7 @@ func (m *MSSQLManager) LimitString(c *Criteria) string {
 	}
 	res := ""
 	if c.Order == nil {
-		res = fmt.Sprintf(" ORDER BY [ID] ")
+		res = " ORDER BY [ID] "
 	}
 	if c.Offset < 1 {
 		return fmt.Sprintf("%s OFFSET 0 ROWS FETCH NEXT %d ROWS ONLY", res, c.Limit)
@@ -62,14 +62,26 @@ func (m *MSSQLManager) OffsetString(c *Criteria) string {
 	}
 	res := ""
 	if c.Order == nil {
-		res = fmt.Sprintf(" ORDER BY [ID] ")
+		res = " ORDER BY [ID] "
 	}
 	return fmt.Sprintf("%s OFFSET %d ROWS", res, c.Offset)
 }
 
 // IdentityString wraps a field name in square brackets for SQL Server identifier escaping.
 func (m *MSSQLManager) IdentityString(f string) string {
-	return fmt.Sprintf("[%s]", f)
+	return "[" + f + "]"
+}
+
+// Placeholder returns the SQL Server parameter placeholder (@p1, @p2, ...) for
+// the given position. Passing nil leaves the counter uninitialised and behaves
+// as position 1 without tracking.
+func (m *MSSQLManager) Placeholder(pos *int) string {
+	if pos == nil {
+		return "@p1"
+	}
+	p := fmt.Sprintf("@p%d", *pos)
+	*pos++
+	return p
 }
 
 // BuildQuery combines WHERE, ORDER BY, LIMIT, and OFFSET clauses into a complete query string.
@@ -84,9 +96,9 @@ func (m *MSSQLManager) BuildQuery(where string, order string, limit string, offs
 	return res + offset + limit
 }
 
-// TableExistsQuery generates a query to check if a table exists in the database.
-func (m *MSSQLManager) TableExistsQuery(name string) string {
-	return fmt.Sprintf("SELECT [Name] FROM [sys].[tables] WHERE [Name] = '%s'", name)
+// TableExistsQuery generates a parameterized query to check if a table exists in the database.
+func (m *MSSQLManager) TableExistsQuery(name string) (string, []interface{}) {
+	return "SELECT [Name] FROM [sys].[tables] WHERE [Name] = @p1", []interface{}{name}
 }
 
 // Operators returns a list of SQL Server compatible operator formats for query building.

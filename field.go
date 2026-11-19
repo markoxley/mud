@@ -9,9 +9,6 @@ package mud
 // It maps to various database-specific types and is used for type conversion.
 type fieldType int
 
-// fieldName represents the name of a database field.
-type fieldName string
-
 // Field type constants define the available field types in the ORM.
 // These correspond to common database data types and are used for type conversion.
 const (
@@ -40,39 +37,39 @@ const (
 // Field type string constants provide string representations of field types.
 // These are used for configuration and type identification.
 const (
-	sInt      = "int"
-	sLong     = "long"
-	sBool     = "bool"
-	sDecimal  = "decimal"
-	sFloat    = "float"
-	sDouble   = "double"
-	sDateTime = "struct"
-	sChar     = "char"
-	sString   = "string"
-	sUUID     = "uuid"
+	sInt     = "int"
+	sLong    = "long"
+	sBool    = "bool"
+	sDecimal = "decimal"
+	sFloat   = "float"
+	sDouble  = "double"
+	sStruct  = "struct"
+	sChar    = "char"
+	sString  = "string"
+	sUUID    = "uuid"
 )
 
 // fieldNames maps string representations of field types to their corresponding fieldType constants.
 // This is used for type conversion and validation.
 var (
 	fieldNames = map[string]fieldType{
-		sInt:      tInt,
-		sLong:     tLong,
-		sBool:     tBool,
-		sDecimal:  tDecimal,
-		sFloat:    tFloat,
-		sDouble:   tDouble,
-		sDateTime: tDateTime,
-		sChar:     tChar,
-		sString:   tString,
-		sUUID:     tUUID,
+		sInt:     tInt,
+		sLong:    tLong,
+		sBool:    tBool,
+		sDecimal: tDecimal,
+		sFloat:   tFloat,
+		sDouble:  tDouble,
+		sStruct:  tDateTime,
+		sChar:    tChar,
+		sString:  tString,
+		sUUID:    tUUID,
 	}
 )
 
-// pgFieldNames maps fieldType constants to their PostgreSQL-specific database types.
-// This is used for generating correct database schema definitions for PostgreSQL.
+// dbFieldTypes maps fieldType constants to their SQL column types.
+// This is used for generating correct database schema definitions.
 var (
-	pgFieldNames = map[fieldType]string{
+	dbFieldTypes = map[fieldType]string{
 		tInt:      "INT",
 		tLong:     "BIGINT",
 		tBool:     "SMALLINT",

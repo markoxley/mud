@@ -28,6 +28,7 @@ package tests
 
 import (
 	"fmt"
+	"reflect"
 	"testing"
 
 	"github.com/markoxley/mud"
@@ -88,6 +89,13 @@ func (m *mockManager) IdentityString(f string) string {
 	return f
 }
 
+func (m *mockManager) Placeholder(pos *int) string {
+	if pos != nil {
+		*pos++
+	}
+	return "?"
+}
+
 func (m *mockManager) BuildQuery(where, order, limit, offset string) string {
 	result := ""
 	if where != "" {
@@ -105,8 +113,8 @@ func (m *mockManager) BuildQuery(where, order, limit, offset string) string {
 	return result
 }
 
-func (m *mockManager) TableExistsQuery(name string) string {
-	return "SELECT 1"
+func (m *mockManager) TableExistsQuery(name string) (string, []interface{}) {
+	return "SELECT 1", []interface{}{name}
 }
 
 func (m *mockManager) TableCreate() string {
@@ -124,6 +132,7 @@ func TestCriteriaWhereString(t *testing.T) {
 		name      string
 		criteria  mud.Criteria
 		wantWhere string
+		wantArgs  []interface{}
 	}{
 		{
 			name: "nil where",
@@ -132,6 +141,7 @@ func TestCriteriaWhereString(t *testing.T) {
 				IncDeleted: false,
 			},
 			wantWhere: "WHERE DeleteDate IS NULL",
+			wantArgs:  nil,
 		},
 		{
 			name: "string where",
@@ -140,6 +150,7 @@ func TestCriteriaWhereString(t *testing.T) {
 				IncDeleted: false,
 			},
 			wantWhere: " WHERE name = 'test' AND DeleteDate IS NULL",
+			wantArgs:  nil,
 		},
 		{
 			name: "where builder pointer",
@@ -147,7 +158,8 @@ func TestCriteriaWhereString(t *testing.T) {
 				Where:      where.Equal("name", "test"),
 				IncDeleted: false,
 			},
-			wantWhere: " WHERE name = 'test' AND DeleteDate IS NULL",
+			wantWhere: " WHERE name = ? AND DeleteDate IS NULL",
+			wantArgs:  []interface{}{"test"},
 		},
 		{
 			name: "include deleted",
@@ -155,15 +167,19 @@ func TestCriteriaWhereString(t *testing.T) {
 				Where:      where.Equal("name", "test"),
 				IncDeleted: true,
 			},
-			wantWhere: " WHERE name = 'test'",
+			wantWhere: " WHERE name = ?",
+			wantArgs:  []interface{}{"test"},
 		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got := tt.criteria.WhereString(mgr)
+			got, args := tt.criteria.WhereClause(mgr)
 			if got != tt.wantWhere {
-				t.Errorf("Criteria.WhereString() = [%v], want [%v]", got, tt.wantWhere)
+				t.Errorf("Criteria.WhereClause() = [%v], want [%v]", got, tt.wantWhere)
+			}
+			if !reflect.DeepEqual(args, tt.wantArgs) {
+				t.Errorf("Criteria.WhereClause() args = [%v], want [%v]", args, tt.wantArgs)
 			}
 		})
 	}
@@ -280,13 +296,14 @@ func TestCriteriaLimitOffset(t *testing.T) {
 	}
 }
 
-func TestCriteriaString(t *testing.T) {
+func TestCriteriaBuild(t *testing.T) {
 	mgr := &mockManager{}
 
 	tests := []struct {
 		name     string
 		criteria mud.Criteria
 		want     string
+		wantArgs []interface{}
 	}{
 		{
 			name: "complete query",
@@ -297,7 +314,8 @@ func TestCriteriaString(t *testing.T) {
 				Offset:     5,
 				IncDeleted: false,
 			},
-			want: " WHERE name = 'test' AND DeleteDate IS NULL ORDER BY name ASC LIMIT 10 OFFSET 5",
+			want:     " WHERE name = ? AND DeleteDate IS NULL ORDER BY name ASC LIMIT 10 OFFSET 5",
+			wantArgs: []interface{}{"test"},
 		},
 		{
 			name: "where only",
@@ -305,7 +323,8 @@ func TestCriteriaString(t *testing.T) {
 				Where:      where.Equal("name", "test"),
 				IncDeleted: false,
 			},
-			want: " WHERE name = 'test' AND DeleteDate IS NULL",
+			want:     " WHERE name = ? AND DeleteDate IS NULL",
+			wantArgs: []interface{}{"test"},
 		},
 		{
 			name: "order only",
@@ -313,15 +332,19 @@ func TestCriteriaString(t *testing.T) {
 				Order:      "name ASC",
 				IncDeleted: false,
 			},
-			want: "WHERE DeleteDate IS NULL ORDER BY name ASC",
+			want:     "WHERE DeleteDate IS NULL ORDER BY name ASC",
+			wantArgs: nil,
 		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got := tt.criteria.String(mgr)
+			got, args := tt.criteria.Build(mgr)
 			if got != tt.want {
-				t.Errorf("Criteria.String() = %v, want %v", got, tt.want)
+				t.Errorf("Criteria.Build() = %v, want %v", got, tt.want)
+			}
+			if !reflect.DeepEqual(args, tt.wantArgs) {
+				t.Errorf("Criteria.Build() args = [%v], want [%v]", args, tt.wantArgs)
 			}
 		})
 	}

@@ -58,6 +58,16 @@ func (m *SqliteManager) IdentityString(f string) string {
 	return fmt.Sprintf("\"%s\"", f)
 }
 
+// Placeholder returns the SQLite parameter placeholder ("?"). The pos parameter
+// is accepted for interface compatibility; SQLite placeholders are positional
+// and not numbered.
+func (m *SqliteManager) Placeholder(pos *int) string {
+	if pos != nil {
+		*pos++
+	}
+	return "?"
+}
+
 // TableCreate returns the SQLite table creation query template.
 // The template includes IF NOT EXISTS to prevent duplicate table creation errors.
 func (m *SqliteManager) TableCreate() string {
@@ -81,10 +91,10 @@ func (m *SqliteManager) BuildQuery(where string, order string, limit string, off
 	return res + limit + offset
 }
 
-// TableExistsQuery generates a query to check if a table exists in the database.
+// TableExistsQuery generates a parameterized query to check if a table exists in the database.
 // Uses the sqlite_master system table to check for table existence.
-func (m *SqliteManager) TableExistsQuery(name string) string {
-	return fmt.Sprintf("SELECT \"name\" FROM sqlite_master WHERE type='table' AND name='%s'", name)
+func (m *SqliteManager) TableExistsQuery(name string) (string, []interface{}) {
+	return "SELECT \"name\" FROM sqlite_master WHERE type='table' AND name=?", []interface{}{name}
 }
 
 // Operators returns a list of SQLite compatible operator formats for query building.

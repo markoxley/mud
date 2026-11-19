@@ -1,8 +1,8 @@
 // Copyright (c) 2025 DaggerTech. All rights reserved.
 // Use of this source code is governed by an MIT license that can be
 // found in the LICENSE file.
-// Package order This is direction very basic, and yet versatile ORM package.
-// At present, this is only for postgres
+// Package order provides the ORDER BY clause builder used to compose
+// dialect-agnostic sorting expressions for generated queries.
 package order
 
 import "fmt"
@@ -26,7 +26,7 @@ func newOrder(field string, direction bool) order {
 
 func newBuilder() *Builder {
 	return &Builder{
-		fields: make([]order, 0, 0),
+		fields: make([]order, 0),
 	}
 }
 func (o *order) String(fn func(f string) string) string {

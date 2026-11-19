@@ -12,4 +12,3 @@ const (
 	conAnd conjunction = " AND " // Logical AND operator for combining conditions
 	conOr  conjunction = " OR "  // Logical OR operator for combining conditions
 )
-

@@ -35,3 +35,8 @@ func NoResults(msg string) ErrNoResults {
 func (e ErrNoResults) Error() string {
 	return e.Err.Error()
 }
+
+// Unwrap returns the underlying error wrapped by ErrNoResults.
+func (e ErrNoResults) Unwrap() error {
+	return e.Err
+}

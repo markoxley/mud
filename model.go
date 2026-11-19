@@ -64,12 +64,47 @@ func (m *Model) Disable() {
 	m.DeleteDate = utils.Ptr(time.Now())
 }
 
-// GetTableName determines the database table name for a model.
-// If the model is a pointer, it dereferences it to get the actual type name.
-// The table name is derived from the struct type name.
-func GetTableName(m Modeller) string {
-	if reflect.TypeOf(m).Kind() == reflect.Pointer {
-		return reflect.Indirect(reflect.ValueOf(m).Elem()).Type().Name()
+// TableName returns the custom table name set with SetTableName, or an
+// empty string when none has been set. Embedding models may override this
+// method to provide a static table name.
+func (m Model) TableName() string {
+	if m.tableName == nil {
+		return ""
 	}
-	return reflect.ValueOf(m).Type().Name()
+	return *m.tableName
+}
+
+// SetTableName sets a custom table name for the model instance.
+func (m *Model) SetTableName(name string) {
+	m.tableName = utils.Ptr(name)
+}
+
+// GetTableName determines the database table name for a model.
+// A model can override the derived struct type name by implementing the
+// Tabler interface (a TableName() string method) or calling SetTableName.
+func GetTableName(m Modeller) string {
+	typ := reflect.TypeOf(m)
+	if typ.Kind() == reflect.Pointer {
+		// Honour an override on the instance itself.
+		if t, ok := m.(Tabler); ok {
+			if name := t.TableName(); name != "" {
+				return name
+			}
+		}
+		typ = typ.Elem()
+	} else {
+		// Honour value-receiver overrides carried by the value, then
+		// pointer-receiver overrides via a fresh *T instance.
+		if t, ok := m.(Tabler); ok {
+			if name := t.TableName(); name != "" {
+				return name
+			}
+		}
+		if t, ok := reflect.New(typ).Interface().(Tabler); ok {
+			if name := t.TableName(); name != "" {
+				return name
+			}
+		}
+	}
+	return typ.Name()
 }

@@ -10,23 +10,10 @@ type operator uint8
 // Operator constants define the supported comparison operations
 const (
 	opEqual   operator = iota // Equal (=) comparison
-	opGreater               // Greater than (>) comparison
-	opLess                  // Less than (<) comparison
-	opLike                  // LIKE pattern matching
-	opIn                    // IN clause for multiple values
-	opBetween               // BETWEEN range comparison
-	opIsNull                // IS NULL check
+	opGreater                 // Greater than (>) comparison
+	opLess                    // Less than (<) comparison
+	opLike                    // LIKE pattern matching
+	opIn                      // IN clause for multiple values
+	opBetween                 // BETWEEN range comparison
+	opIsNull                  // IS NULL check
 )
-
-// operatorType defines the valid data types for each operator
-// Each element is a bitmask of compatible data types
-var operatorType [7]int = [7]int{
-	dBool & dDate & dFloat & dDouble & dInt & dLong & dText,    // Equal supports all types
-	dDate & dFloat & dDouble & dInt & dLong & dText,            // Greater than supports numeric and text types
-	dDate & dFloat & dDouble & dInt & dLong & dText,            // Less than supports numeric and text types
-	dText,                                                      // LIKE only supports text
-	dDate & dFloat & dDouble & dInt & dLong & dText,            // IN supports all types except bool
-	dDate & dFloat & dDouble & dInt & dLong,                    // BETWEEN supports numeric types
-	dBool & dDate & dFloat & dDouble & dInt & dLong & dText,    // IS NULL supports all types
-}
-

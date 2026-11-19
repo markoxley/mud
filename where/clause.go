@@ -22,13 +22,16 @@ type clause struct {
 	values      []interface{}
 }
 
-// String generates the SQL clause string representation
-// This method implements the clauser interface
+// build generates the SQL clause string representation using placeholder
+// markers instead of literal values. This method implements the clauser
+// interface.
 //
 // @receiver c The clause instance
 // @param operators List of operator strings to use for generating the clause
-// @return SQL clause string or empty string if invalid
-func (c clause) String(operators []string) string {
+// @param ph Function that returns the next placeholder marker
+// @param pos Counter used by numbered placeholders (e.g. @pN)
+// @return SQL clause string (or empty string if invalid) and its bind arguments
+func (c clause) build(operators []string, ph func(*int) string, pos *int) (string, []interface{}) {
 	// Calculate operator index, adjusting for NOT conditions
 	opCode := int(c.op)
 	if c.not {
@@ -43,7 +46,7 @@ func (c clause) String(operators []string) string {
 	case opIn:
 		fieldCount = len(c.values)
 		if fieldCount == 0 {
-			return ""
+			return "", nil
 		}
 	case opIsNull:
 		fieldCount = 0
@@ -51,35 +54,40 @@ func (c clause) String(operators []string) string {
 
 	// Validate values count
 	if len(c.values) < fieldCount {
-		return ""
+		return "", nil
 	}
 
-	// Convert values to strings
-	vls := make([]string, fieldCount)
+	// Convert values to bindable arguments
+	args := make([]interface{}, fieldCount)
 	for i := 0; i < fieldCount; i++ {
-		f, ok := utils.MakeValue(c.values[i])
+		a, ok := utils.MakeArg(c.values[i])
 		if !ok {
-			return ""
+			return "", nil
 		}
-		vls[i] = f
+		args[i] = a
 	}
 
 	// Construct and return the SQL clause
 	switch c.op {
 	case opIn:
-		return fmt.Sprintf(operators[opCode], c.field, strings.Join(vls, ","))
-	case opBetween:
-		v1 := vls[0]
-		v2 := vls[1]
-		if v1 > v2 {
-			v1 = vls[1]
-			v2 = vls[0]
+		phs := make([]string, fieldCount)
+		for i := range phs {
+			phs[i] = ph(pos)
 		}
-		return fmt.Sprintf(operators[opCode], c.field, v1, v2)
+		return fmt.Sprintf(operators[opCode], c.field, strings.Join(phs, ",")), args
+	case opBetween:
+		// Preserve previous behaviour of ordering the range values, using
+		// their SQL string representation for comparison as before
+		v1, _ := utils.MakeValue(c.values[0])
+		v2, _ := utils.MakeValue(c.values[1])
+		if v1 > v2 {
+			args[0], args[1] = args[1], args[0]
+		}
+		return fmt.Sprintf(operators[opCode], c.field, ph(pos), ph(pos)), args
 	case opIsNull:
-		return fmt.Sprintf(operators[opCode], c.field)
+		return fmt.Sprintf(operators[opCode], c.field), args
 	default:
-		return fmt.Sprintf(operators[opCode], c.field, vls[0])
+		return fmt.Sprintf(operators[opCode], c.field, ph(pos)), args
 	}
 }
 

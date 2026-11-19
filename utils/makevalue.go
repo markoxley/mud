@@ -45,3 +45,35 @@ func MakeValue(value interface{}) (string, bool) {
 	return "", false
 }
 
+// MakeArg converts a value to a database-bindable argument suitable for use
+// with parameterized queries. It mirrors the type support of MakeValue but
+// returns values in a form the database drivers can bind safely, rather than
+// as SQL literal text (so no quoting or escaping is required).
+// Returns the argument and a boolean indicating success.
+//
+// @param value The value to convert
+// @return A bindable argument and a boolean indicating success
+func MakeArg(value interface{}) (interface{}, bool) {
+	switch v := value.(type) {
+	case float32:
+		return float64(v), true
+	case float64:
+		return v, true
+	case int, int8, int16, int32, int64, uint, uint8, uint16, uint32, uint64:
+		return v, true
+	case bool:
+		// Match MakeValue semantics: booleans are stored as 1 or 0
+		if v {
+			return 1, true
+		}
+		return 0, true
+	case string:
+		return v, true
+	case time.Time:
+		// Bind as the same text representation previously interpolated into
+		// queries so populateModel's SQLToTime conversion keeps working
+		return TimeToSQL(v), true
+	}
+	// Return nil and false for unsupported types
+	return nil, false
+}

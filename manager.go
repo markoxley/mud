@@ -30,11 +30,17 @@ type Manager interface {
 	// IdentityString wraps field names with database-specific identifier quotes
 	IdentityString(f string) string
 
+	// Placeholder returns the database-specific parameter placeholder for the
+	// given 1-based position (e.g. "?" or "@p1"). The pointed-to position is
+	// incremented each call.
+	Placeholder(pos *int) string
+
 	// BuildQuery combines WHERE, ORDER BY, LIMIT, and OFFSET clauses into a query
 	BuildQuery(where string, order string, limit string, offset string) string
 
-	// TableExistsQuery generates a query to check if a table exists
-	TableExistsQuery(name string) string
+	// TableExistsQuery generates a parameterized query to check if a table
+	// exists, returning the query and its bind arguments
+	TableExistsQuery(name string) (string, []interface{})
 
 	// Operators returns a list of database-specific operator formats
 	Operators() []string
