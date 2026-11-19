@@ -48,6 +48,21 @@ items below before upgrading.
 
 ### Behavior changes (fixes)
 
+- **Column types are now dialect-specific.** Previously every database got
+  the same declarations. SQL Server now emits `BIT`, `FLOAT`, `REAL`,
+  `NVARCHAR`, and `DATETIME2`; MySQL emits `TINYINT(1)`, `FLOAT`, `CHAR(36)`;
+  SQLite uses `INTEGER`/`REAL`/`VARCHAR` affinity types.
+
+- **`UNSIGNED` is MySQL-only** and emitted only on numeric columns
+  (`INT`/`BIGINT`/`DECIMAL`/`FLOAT`/`DOUBLE`). Previously it was appended
+  unconditionally — a syntax error in T-SQL and meaningless in SQLite.
+  On SQL Server, unsigned fields are **widened** instead: `uint`/`uint32` →
+  `BIGINT`, `uint64` → `DECIMAL(20,0)`.
+
+- **Size suffixes are dialect-aware.** `size:N` no longer produces
+  `INT(N)` on SQL Server (invalid T-SQL); precision is only emitted for
+  `DECIMAL` and character types there. MySQL keeps `INT(N)` display width.
+
 - **Unsigned integer fields now populate.** An inverted `err != nil` check
   meant `uint*` columns were never written back onto fetched models.
 
@@ -77,6 +92,34 @@ items below before upgrading.
 
 - **`Scan`/`Columns` errors are checked** instead of silently ignored during
   model population.
+
+- **`Refresh` could return the wrong model.** It passed `*string` to
+  `where.Equal`, which is not a bindable argument, so the `ID = ?` clause was
+  silently dropped and the query returned the first row instead.
+
+- **Timestamps without fractional seconds failed to populate.**
+  `utils.SQLToTime` returned `false` for `YYYY-MM-DD HH:MM:SS` because an empty
+  nanoseconds string was passed to `strconv.Atoi`; every `time.Time` model
+  field stayed zero on fetch. Missing nanoseconds now default to `0`.
+
+- **UUID string criteria are detected case-insensitively.** `uuid.NewV4()`
+  emits lowercase but the detection regex only matched uppercase, so a UUID
+  string was treated as raw SQL and the query failed. The generated clause
+  also targets `ID` rather than `id`.
+
+- **`where.In` accepts pointers.** A `*[]int` now expands into per-element
+  placeholders instead of producing an empty clause; a nil pointer yields an
+  empty clause (which is dropped from the builder).
+
+- **Fields of unexported embedded structs are modeled.** `getDefs` skipped
+  anonymous fields of unexported struct types entirely, silently dropping
+  their promoted exported fields. It now recurses into embedded structs
+  regardless of the embedded type's visibility.
+
+- **Ambiguous promoted fields no longer crash Save/Update.** Two embedded
+  structs exposing the same column name made `FieldByName` return an invalid
+  `reflect.Value`, and `insertCommand`/`updateCommand` panicked on it. They
+  now skip such fields like `setFieldValue` already did.
 
 ### New APIs
 

@@ -117,9 +117,12 @@ func SQLToTime(st string) (*time.Time, bool) {
 			return nil, false
 		}
 
-		ns, e = strconv.Atoi(nsStr)
-		if e != nil {
-			return nil, false
+		ns = 0
+		if nsStr != "" {
+			ns, e = strconv.Atoi(nsStr)
+			if e != nil {
+				return nil, false
+			}
 		}
 	}
 	// Create and return time.Time object

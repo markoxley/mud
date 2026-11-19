@@ -602,9 +602,9 @@ func (db *DB) getCriteria(criteria []interface{}) (*Criteria, error) {
 		} else if c, ok := cr.(order.Builder); ok {
 			return &Criteria{Order: &c}, nil
 		} else if c, ok := cr.(string); ok {
-			var re = regexp.MustCompile(`^\s*[0-9A-F]{8}-[0-9A-F]{4}-[0-9A-F]{4}-[0-9A-F]{4}-[0-9A-F]{12}\s*$`)
+			var re = regexp.MustCompile(`(?i)^\s*[0-9A-F]{8}-[0-9A-F]{4}-[0-9A-F]{4}-[0-9A-F]{4}-[0-9A-F]{12}\s*$`)
 			if len(re.FindStringIndex(c)) > 0 {
-				return &Criteria{Where: where.Equal("id", c)}, nil
+				return &Criteria{Where: where.Equal("ID", c)}, nil
 			}
 
 			return &Criteria{Where: c}, nil
@@ -762,6 +762,11 @@ func (db *DB) insertCommand(m Modeller) (string, []interface{}, error) {
 			continue
 		}
 		vi := v.Elem().FieldByName(f.name)
+		// Ambiguous promoted fields (same name in two embedded structs)
+		// resolve to an invalid reflect.Value; skip them rather than panic.
+		if !vi.IsValid() || !vi.CanInterface() {
+			continue
+		}
 
 		if f.allowNull {
 			if vi.IsNil() {
@@ -805,14 +810,20 @@ func (db *DB) updateCommand(m Modeller) (string, []interface{}, error) {
 			continue
 		}
 		var assignment string
-		if f.allowNull && v.Elem().FieldByName(f.name).IsNil() {
+		vi := v.Elem().FieldByName(f.name)
+		// Ambiguous promoted fields resolve to an invalid reflect.Value;
+		// skip them rather than panic.
+		if !vi.IsValid() || !vi.CanInterface() {
+			continue
+		}
+		if f.allowNull && vi.IsNil() {
 			assignment = fmt.Sprintf(" %s = null", db.mgr.IdentityString(f.name))
 		} else {
 			var value interface{}
 			if f.allowNull {
-				value = v.Elem().FieldByName(f.name).Elem().Interface()
+				value = vi.Elem().Interface()
 			} else {
-				value = v.Elem().FieldByName(f.name).Interface()
+				value = vi.Interface()
 			}
 			if arg, ok := utils.MakeArg(value); ok {
 				assignment = fmt.Sprintf(" %s = %s", db.mgr.IdentityString(f.name), db.mgr.Placeholder(&pos))
@@ -989,6 +1000,40 @@ func (db *DB) RemoveMany(m Modeller, c *Criteria, tx ...*sql.Tx) (int, error) {
 	return r, err
 }
 
+// columnType resolves the dialect-specific SQL column type for a field.
+// SQL Server has no unsigned integer types, so unsigned fields are widened
+// (INT -> BIGINT, BIGINT -> DECIMAL(20,0)) to preserve the full range.
+func (db *DB) columnType(f field) string {
+	switch db.cfg.Type {
+	case "mysql", "mariadb":
+		return mysqlFieldTypes[f.fType]
+	case "sqlserver", "mssql":
+		if f.unsigned {
+			switch f.fType {
+			case tInt:
+				return "BIGINT"
+			case tLong:
+				return "DECIMAL(20,0)"
+			}
+		}
+		return mssqlFieldTypes[f.fType]
+	default:
+		return sqliteFieldTypes[f.fType]
+	}
+}
+
+// sized reports whether the field type accepts a "(size[,scale])" suffix in
+// the current dialect. SQL Server only supports precision on DECIMAL and
+// length on character types; a numeric "(n)" suffix is invalid T-SQL.
+func (db *DB) sized(t fieldType) bool {
+	switch db.cfg.Type {
+	case "sqlserver", "mssql":
+		return t == tDecimal || t == tString
+	default:
+		return true
+	}
+}
+
 func (db *DB) tableDefinition(m Modeller) ([]string, bool) {
 	sql := make([]string, 0, 3)
 
@@ -1024,14 +1069,16 @@ func (db *DB) tableDefinition(m Modeller) ([]string, bool) {
 		if fldsStr != "" {
 			fldsStr += ", "
 		}
-		fldsStr += fmt.Sprintf("%s %s", db.mgr.IdentityString(f.name), dbFieldTypes[f.fType])
-		if f.fType != tUUID && f.fType != tChar && f.size.Size > 0 {
+		ct := db.columnType(f)
+		fldsStr += fmt.Sprintf("%s %s", db.mgr.IdentityString(f.name), ct)
+		if f.size.Size > 0 && db.sized(f.fType) && !strings.Contains(ct, "(") {
 			fldsStr += fmt.Sprintf("(%s)", f.size.String())
 		}
 		if f.fType == tString && f.size.Size == 0 {
 			fldsStr += "(256)"
 		}
-		if f.unsigned {
+		if f.unsigned && unsignedCapable(f.fType) &&
+			(db.cfg.Type == "mysql" || db.cfg.Type == "mariadb") {
 			fldsStr += " UNSIGNED"
 		}
 		if !f.allowNull {
@@ -1055,7 +1102,7 @@ func (db *DB) Refresh(m Modeller) error {
 	if m.GetID() == nil {
 		return errors.New("no id")
 	}
-	m, err := db.First(m, where.Equal("ID", m.GetID()))
+	m, err := db.First(m, where.Equal("ID", *m.GetID()))
 	return err
 }
 

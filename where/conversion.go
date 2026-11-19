@@ -24,7 +24,7 @@ func convertToInterfaceArray(values interface{}) []interface{} {
 			if newValue == nil {
 				return nil
 			}
-			return []interface{}{newValue}
+			return convertToInterfaceArray(newValue)
 		}
 		return []interface{}{values}
 	}

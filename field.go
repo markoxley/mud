@@ -66,22 +66,60 @@ var (
 	}
 )
 
-// dbFieldTypes maps fieldType constants to their SQL column types.
-// This is used for generating correct database schema definitions.
-var (
-	dbFieldTypes = map[fieldType]string{
-		tInt:      "INT",
-		tLong:     "BIGINT",
-		tBool:     "SMALLINT",
-		tDecimal:  "DECIMAL",
-		tFloat:    "REAL",
-		tDouble:   "DOUBLE",
-		tDateTime: "DATETIME",
-		tChar:     "VARCHAR(1)",
-		tString:   "VARCHAR",
-		tUUID:     "VARCHAR(36)",
+// sqliteFieldTypes maps fieldType constants to SQLite column types.
+// SQLite uses type affinity, so these are its preferred declared types.
+var sqliteFieldTypes = map[fieldType]string{
+	tInt:      "INTEGER",
+	tLong:     "INTEGER",
+	tBool:     "INTEGER",
+	tDecimal:  "DECIMAL",
+	tFloat:    "REAL",
+	tDouble:   "REAL",
+	tDateTime: "DATETIME",
+	tChar:     "CHAR(1)",
+	tString:   "VARCHAR",
+	tUUID:     "VARCHAR(36)",
+}
+
+// mysqlFieldTypes maps fieldType constants to MySQL column types.
+var mysqlFieldTypes = map[fieldType]string{
+	tInt:      "INT",
+	tLong:     "BIGINT",
+	tBool:     "TINYINT(1)",
+	tDecimal:  "DECIMAL",
+	tFloat:    "FLOAT",
+	tDouble:   "DOUBLE",
+	tDateTime: "DATETIME",
+	tChar:     "CHAR(1)",
+	tString:   "VARCHAR",
+	tUUID:     "CHAR(36)",
+}
+
+// mssqlFieldTypes maps fieldType constants to SQL Server column types.
+// Note that "VARCHAR(36)" (not UNIQUEIDENTIFIER) is used for IDs because the
+// ORM stores them as strings and must round-trip values unmodified.
+var mssqlFieldTypes = map[fieldType]string{
+	tInt:      "INT",
+	tLong:     "BIGINT",
+	tBool:     "BIT",
+	tDecimal:  "DECIMAL",
+	tFloat:    "FLOAT",
+	tDouble:   "FLOAT",
+	tDateTime: "DATETIME2",
+	tChar:     "CHAR(1)",
+	tString:   "NVARCHAR",
+	tUUID:     "VARCHAR(36)",
+}
+
+// unsignedCapable reports whether a fieldType can carry MySQL's UNSIGNED
+// attribute. It is only valid on numeric column types.
+func unsignedCapable(t fieldType) bool {
+	switch t {
+	case tInt, tLong, tDecimal, tFloat, tDouble:
+		return true
 	}
-)
+	return false
+}
 
 // field represents a database field definition.
 // It contains all the necessary information to define and work with a database column.

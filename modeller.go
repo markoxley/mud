@@ -80,6 +80,22 @@ func getDefs(t interface{}, first bool) []field {
 	nf := v.NumField()
 	for i := 0; i < nf; i++ {
 		st := ft.Field(i)
+		// Recurse into anonymous embedded structs before the exported check:
+		// an embedded field of an unexported struct type is itself unexported,
+		// but its exported fields are promoted and remain settable through
+		// FieldByName on the parent model.
+		if st.Anonymous {
+			et := st.Type
+			if et.Kind() == reflect.Ptr {
+				et = et.Elem()
+			}
+			if et.Kind() == reflect.Struct && et != timeType {
+				if subf := getDefs(reflect.New(et).Elem().Interface(), false); len(subf) > 0 {
+					res = append(res, subf...)
+				}
+				continue
+			}
+		}
 		// Skip unexported fields: they cannot be populated by reflection
 		// and sv.Interface() would panic on them.
 		if !st.IsExported() {
