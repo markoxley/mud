@@ -6,6 +6,7 @@ package utils
 
 import (
 	"fmt"
+	"reflect"
 	"strings"
 	"time"
 )
@@ -41,7 +42,40 @@ func MakeValue(value interface{}) (string, bool) {
 		// Convert time.Time to SQL datetime string
 		return fmt.Sprintf("'%s'", TimeToSQL(v)), true
 	}
+	// Named types (e.g. type Status int) miss every case in the type
+	// switch; fall back to their underlying kind so they convert like
+	// the equivalent builtin.
+	if arg, ok := MakeValueByKind(value); ok {
+		return arg, true
+	}
 	// Return empty string and false for unsupported types
+	return "", false
+}
+
+// MakeValueByKind converts a value to a SQL-compatible string by its
+// reflect.Kind rather than its exact type, so named types (enums and
+// similar aliases with methods) are handled like the builtins they are
+// based on.
+func MakeValueByKind(value interface{}) (string, bool) {
+	rv := reflect.ValueOf(value)
+	if !rv.IsValid() {
+		return "", false
+	}
+	switch rv.Kind() {
+	case reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64:
+		return fmt.Sprintf("%d", rv.Int()), true
+	case reflect.Uint, reflect.Uint8, reflect.Uint16, reflect.Uint32, reflect.Uint64:
+		return fmt.Sprintf("%d", rv.Uint()), true
+	case reflect.Bool:
+		if rv.Bool() {
+			return "1", true
+		}
+		return "0", true
+	case reflect.String:
+		return fmt.Sprintf("'%s'", strings.ReplaceAll(rv.String(), "'", "''")), true
+	case reflect.Float32, reflect.Float64:
+		return fmt.Sprintf("%f", rv.Float()), true
+	}
 	return "", false
 }
 
@@ -74,6 +108,34 @@ func MakeArg(value interface{}) (interface{}, bool) {
 		// queries so populateModel's SQLToTime conversion keeps working
 		return TimeToSQL(v), true
 	}
-	// Return nil and false for unsupported types
+	// Named types (e.g. type Viewed int) miss every case in the type
+	// switch; fall back to their underlying kind so they bind like the
+	// equivalent builtin.
+	return makeArgByKind(value)
+}
+
+// makeArgByKind converts a value to a bindable argument by its
+// reflect.Kind rather than its exact type. Integer kinds are widened to
+// int64 so database drivers receive a concrete builtin type.
+func makeArgByKind(value interface{}) (interface{}, bool) {
+	rv := reflect.ValueOf(value)
+	if !rv.IsValid() {
+		return nil, false
+	}
+	switch rv.Kind() {
+	case reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64:
+		return rv.Int(), true
+	case reflect.Uint, reflect.Uint8, reflect.Uint16, reflect.Uint32, reflect.Uint64:
+		return int64(rv.Uint()), true
+	case reflect.Bool:
+		if rv.Bool() {
+			return 1, true
+		}
+		return 0, true
+	case reflect.String:
+		return rv.String(), true
+	case reflect.Float32, reflect.Float64:
+		return rv.Float(), true
+	}
 	return nil, false
 }

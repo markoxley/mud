@@ -130,6 +130,33 @@ func TestMakeValue(t *testing.T) {
 	}
 }
 
+func TestMakeValueNamedTypes(t *testing.T) {
+	tests := []struct {
+		name     string
+		input    interface{}
+		want     string
+		wantBool bool
+	}{
+		{"named int", namedInt(7), "7", true},
+		{"named uint8", namedUint8(2), "2", true},
+		{"named bool true", namedBool(true), "1", true},
+		{"named bool false", namedBool(false), "0", true},
+		{"named string", namedString("it's"), "'it''s'", true},
+		{"named float64", namedFloat64(1.5), "1.500000", true},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got, ok := utils.MakeValue(tt.input)
+			if got != tt.want {
+				t.Errorf("MakeValue(%v) = %q, want %q", tt.input, got, tt.want)
+			}
+			if ok != tt.wantBool {
+				t.Errorf("MakeValue(%v) ok = %v, want %v", tt.input, ok, tt.wantBool)
+			}
+		})
+	}
+}
+
 func TestPtr(t *testing.T) {
 	t.Run("string pointer", func(t *testing.T) {
 		value := "test"

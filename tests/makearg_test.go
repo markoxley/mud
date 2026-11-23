@@ -53,6 +53,40 @@ func TestMakeArg(t *testing.T) {
 	}
 }
 
+// Named types used to exercise the kind-based fallback in MakeArg/MakeValue.
+type namedInt int
+type namedUint8 uint8
+type namedBool bool
+type namedString string
+type namedFloat64 float64
+
+func TestMakeArgNamedTypes(t *testing.T) {
+	tests := []struct {
+		name   string
+		input  interface{}
+		want   interface{}
+		wantOK bool
+	}{
+		{"named int", namedInt(7), int64(7), true},
+		{"named uint8", namedUint8(2), int64(2), true},
+		{"named bool true", namedBool(true), 1, true},
+		{"named bool false", namedBool(false), 0, true},
+		{"named string", namedString("hi"), "hi", true},
+		{"named float64", namedFloat64(1.5), float64(1.5), true},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got, ok := utils.MakeArg(tt.input)
+			if ok != tt.wantOK {
+				t.Fatalf("MakeArg(%v) ok = %v, want %v", tt.input, ok, tt.wantOK)
+			}
+			if ok && !reflect.DeepEqual(got, tt.want) {
+				t.Errorf("MakeArg(%v) = %v (%T), want %v (%T)", tt.input, got, got, tt.want, tt.want)
+			}
+		})
+	}
+}
+
 func TestSQLToTimeEdges(t *testing.T) {
 	valid := []struct {
 		name  string
