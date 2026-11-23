@@ -121,6 +121,11 @@ items below before upgrading.
   `reflect.Value`, and `insertCommand`/`updateCommand` panicked on it. They
   now skip such fields like `setFieldValue` already did.
 
+- **Mid-iteration query failures are no longer silent.** `populateModel` and
+  `RawSelect` now check `Rows.Err()` after iterating, so a context
+  cancellation (or driver error) partway through a result set surfaces as an
+  error instead of returning truncated data as success.
+
 ### New APIs
 
 - **`Tabler` interface** — implement `TableName() string` to override the
@@ -130,6 +135,11 @@ items below before upgrading.
 - **`utils.MakeArg`** — bind-safe value conversion used by the
   parameterized paths (bool → 1/0, `time.Time` → SQL text).
 - **`ErrNoResults.Unwrap`** — enables `errors.Is`/`errors.As` chains.
+- **`DB.WithContext(ctx)`** — returns a `*DB` clone whose queries honour the
+  context for cancellation and deadlines (`QueryContext`/`ExecContext`/
+  `BeginTx`). The clone shares the parent's pool, schema caches and locks, so
+  it can be passed to any function taking `*DB`, including the generic
+  helpers. A nil context behaves like `context.Background()`.
 
 ### Schema/DDL note
 

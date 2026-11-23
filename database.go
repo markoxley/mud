@@ -4,6 +4,7 @@
 package mud
 
 import (
+	"context"
 	"database/sql"
 	"errors"
 	"fmt"
@@ -32,10 +33,13 @@ type DB struct {
 	dbtype           string
 	mgr              Manager
 	db               *sql.DB
-	mu               sync.RWMutex
+	ctx              context.Context
+	// mu and createMu are pointers so that WithContext clones share the
+	// parent's locks instead of copying them (copylocks).
+	mu *sync.RWMutex
 	// createMu serializes table creation: the definition is cached before
 	// the CREATE statement runs, so concurrent callers must wait for it.
-	createMu    sync.Mutex
+	createMu    *sync.Mutex
 	knownTables []string
 	tableDef    map[string][]field
 }
@@ -65,6 +69,8 @@ func New(config *Config) (*DB, error) {
 		cfg:              config,
 		dbtype:           dbType,
 		connectionString: cs,
+		mu:               &sync.RWMutex{},
+		createMu:         &sync.Mutex{},
 		knownTables:      make([]string, 0),
 		tableDef:         make(map[string][]field),
 	}
@@ -81,6 +87,26 @@ func (db *DB) SqlDB() *sql.DB {
 	db.mu.RLock()
 	defer db.mu.RUnlock()
 	return db.db
+}
+
+// WithContext returns a shallow copy of db whose queries honour the supplied
+// context for cancellation and deadlines. The clone shares the parent's
+// connection pool, manager, schema caches and locks, so it can be used
+// anywhere a *DB is expected (e.g. generic helpers). A nil ctx is treated
+// as context.Background().
+func (db *DB) WithContext(ctx context.Context) *DB {
+	c := *db
+	c.ctx = ctx
+	return &c
+}
+
+// getContext returns the context bound by WithContext, or
+// context.Background() when none is set. It never returns nil.
+func (db *DB) getContext() context.Context {
+	if db.ctx == nil {
+		return context.Background()
+	}
+	return db.ctx
 }
 
 func (db *DB) Close() {
@@ -119,7 +145,7 @@ func (db *DB) beginTransaction(d *sql.DB) (*sql.Tx, error) {
 	if db.dbtype == "sqlite" {
 		return nil, nil
 	}
-	return d.Begin()
+	return d.BeginTx(db.getContext(), nil)
 }
 
 // commitTransaction commites the transaction to the database
@@ -163,10 +189,11 @@ func (db *DB) selectScalar(q string, args []interface{}, tx ...*sql.Tx) (interfa
 		}
 	}
 	var res *sql.Rows
+	ctx := db.getContext()
 	if qtx != nil {
-		res, err = qtx.Query(q, args...)
+		res, err = qtx.QueryContext(ctx, q, args...)
 	} else {
-		res, err = db.db.Query(q, args...)
+		res, err = db.db.QueryContext(ctx, q, args...)
 	}
 	if err != nil {
 		return nil, false
@@ -203,10 +230,11 @@ func (db *DB) selectQuery(m Modeller, q string, args []interface{}, tx ...*sql.T
 		}
 	}
 	var res *sql.Rows
+	ctx := db.getContext()
 	if qtx != nil {
-		res, err = qtx.Query(q, args...)
+		res, err = qtx.QueryContext(ctx, q, args...)
 	} else {
-		res, err = db.db.Query(q, args...)
+		res, err = db.db.QueryContext(ctx, q, args...)
 	}
 	if err != nil {
 		return nil, false
@@ -262,6 +290,11 @@ func (db *DB) populateModel(m Modeller, r *sql.Rows) ([]Modeller, bool) {
 		newObj := v.Elem().Interface().(Modeller)
 		db.doRestore(newObj)
 		res = append(res, newObj)
+	}
+	// Surface mid-iteration failures such as context cancellation instead
+	// of returning a truncated result set as success.
+	if err := r.Err(); err != nil {
+		return nil, false
 	}
 	return res, true
 }
@@ -471,10 +504,11 @@ func (db *DB) executeQuery(q string, args []interface{}, tx ...*sql.Tx) error {
 			return err
 		}
 	}
+	ctx := db.getContext()
 	if qtx != nil {
-		_, err = qtx.Exec(q, args...)
+		_, err = qtx.ExecContext(ctx, q, args...)
 	} else {
-		_, err = db.db.Exec(q, args...)
+		_, err = db.db.ExecContext(ctx, q, args...)
 	}
 	return err
 }
@@ -546,10 +580,11 @@ func (db *DB) RawSelect(qry string, args []interface{}, tx ...*sql.Tx) ([]map[st
 		}
 	}
 	var res *sql.Rows
+	ctx := db.getContext()
 	if qtx != nil {
-		res, err = qtx.Query(qry, args...)
+		res, err = qtx.QueryContext(ctx, qry, args...)
 	} else {
-		res, err = db.db.Query(qry, args...)
+		res, err = db.db.QueryContext(ctx, qry, args...)
 	}
 	if err != nil {
 		return nil, err
@@ -575,6 +610,9 @@ func (db *DB) RawSelect(qry string, args []interface{}, tx ...*sql.Tx) ([]map[st
 			row[n] = *(tmp.(**string)) //vls[i]
 		}
 		data = append(data, row)
+	}
+	if err := res.Err(); err != nil {
+		return nil, err
 	}
 	return data, nil
 }
@@ -641,10 +679,11 @@ func (db *DB) Range(mdl Modeller, criteria ...interface{}) iter.Seq[Modeller] {
 			defer db.CommitTransaction(qtx)
 		}
 		var res *sql.Rows
+		ctx := db.getContext()
 		if qtx != nil {
-			res, err = qtx.Query(s, args...)
+			res, err = qtx.QueryContext(ctx, s, args...)
 		} else {
-			res, err = db.db.Query(s, args...)
+			res, err = db.db.QueryContext(ctx, s, args...)
 		}
 		if err != nil {
 			return

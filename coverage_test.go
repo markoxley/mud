@@ -4,6 +4,7 @@
 package mud
 
 import (
+	"context"
 	"errors"
 	"path/filepath"
 	"reflect"
@@ -817,5 +818,78 @@ func TestCoverageMisc(t *testing.T) {
 	// Generic Range early exit.
 	for range Range[covModel](db) {
 		break
+	}
+}
+
+func TestCoverageWithContext(t *testing.T) {
+	db := covDB(t)
+	m := newCovModel()
+	if err := db.Save(m); err != nil {
+		t.Fatalf("Save: %v", err)
+	}
+
+	// A nil ctx behaves like no ctx at all.
+	if _, err := db.WithContext(nil).Fetch(covModel{}); err != nil {
+		t.Fatalf("Fetch with nil ctx: %v", err)
+	}
+
+	// The clone is a *DB, so generic helpers and methods work unchanged.
+	rows, err := Fetch[covModel](db.WithContext(context.Background()))
+	if err != nil || len(rows) == 0 {
+		t.Fatalf("generic Fetch via WithContext: rows=%d err=%v", len(rows), err)
+	}
+
+	// A cancelled context fails every operation on the clone.
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+	cdb := db.WithContext(ctx)
+	if _, err := cdb.Fetch(covModel{}); err == nil {
+		t.Error("expected Fetch error on cancelled context")
+	}
+	if err := cdb.Save(newCovModel()); err == nil {
+		t.Error("expected Save error on cancelled context")
+	}
+	if _, err := cdb.RawSelect("SELECT 1", nil); err == nil {
+		t.Error("expected RawSelect error on cancelled context")
+	}
+	if err := cdb.RawExecute("SELECT 1", nil); err == nil {
+		t.Error("expected RawExecute error on cancelled context")
+	}
+	if got := cdb.Count(&covModel{}); got != 0 {
+		t.Errorf("expected Count=0 on cancelled context, got %d", got)
+	}
+	for range cdb.Range(covModel{}) {
+		t.Error("Range should not yield on cancelled context")
+	}
+
+	// The base DB is unaffected by the clone's context.
+	if _, err := db.Fetch(covModel{}); err != nil {
+		t.Errorf("base DB affected by clone ctx: %v", err)
+	}
+}
+
+func TestCoverageWithContextTimeout(t *testing.T) {
+	db := covDB(t)
+	if err := db.Save(newCovModel()); err != nil {
+		t.Fatalf("Save: %v", err)
+	}
+
+	// An already-expired deadline fails before the query runs.
+	ctx, cancel := context.WithTimeout(context.Background(), -time.Second)
+	defer cancel()
+	if _, err := db.WithContext(ctx).Fetch(covModel{}); err == nil {
+		t.Error("expected Fetch error on expired deadline")
+	}
+
+	// A deadline interrupts a long-running query mid-execution: COUNT(*)
+	// forces sqlite to materialize all 1e8 CTE rows before the first result,
+	// which cannot finish within the timeout.
+	q := `WITH RECURSIVE cnt(x) AS (
+		SELECT 1 UNION ALL SELECT x+1 FROM cnt LIMIT 100000000
+	) SELECT COUNT(*) FROM cnt`
+	ctx2, cancel2 := context.WithTimeout(context.Background(), 10*time.Millisecond)
+	defer cancel2()
+	if _, ok := db.WithContext(ctx2).RawScalar(q, nil); ok {
+		t.Error("expected RawScalar to be cancelled by deadline")
 	}
 }

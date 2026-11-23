@@ -5,6 +5,7 @@ package mud
 
 import (
 	"strings"
+	"sync"
 	"testing"
 	"time"
 )
@@ -29,7 +30,7 @@ func newDDLTestDB(t *testing.T, dialect string) *DB {
 	if err != nil {
 		t.Fatalf("GetManager(%q): %v", dialect, err)
 	}
-	return &DB{cfg: cfg, mgr: mgr, tableDef: make(map[string][]field)}
+	return &DB{cfg: cfg, mgr: mgr, mu: &sync.RWMutex{}, createMu: &sync.Mutex{}, tableDef: make(map[string][]field)}
 }
 
 func TestTableDefinitionDialects(t *testing.T) {

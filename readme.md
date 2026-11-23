@@ -1,18 +1,29 @@
-# mud - Database ORM for Go
+# mud — a lightweight ORM for Go
 
-_Note: This is a work in progress and is not yet ready for production use._
+[![Go Reference](https://pkg.go.dev/badge/github.com/markoxley/mud.svg)](https://pkg.go.dev/github.com/markoxley/mud)
+[![Go Report Card](https://goreportcard.com/badge/github.com/markoxley/mud)](https://goreportcard.com/report/github.com/markoxley/mud)
+[![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 
-mud is a versatile and lightweight ORM (Object-Relational Mapping) package for Go that supports multiple database backends including PostgreSQL, MySQL, SQLite, and Microsoft SQL Server.
+`mud` is a lightweight ORM for Go supporting **SQLite**, **MySQL/MariaDB** and **Microsoft SQL Server**. Models are plain structs — tables, columns and indexes are generated automatically from `mud` struct tags, and all queries are fully parameterized for the target dialect.
+
+> **Status:** pre-1.0 — the API may still change. See [CHANGELOG.md](CHANGELOG.md) for recent changes and breaking items.
 
 ## Features
 
-- Support for multiple database backends
-- Fluent query builder interface
-- Advanced WHERE clause construction
-- Automatic model mapping
-- Transaction support
-- Field validation and type safety
-- UUID support for primary keys
+- Multi-dialect SQL generation — correct column types and placeholders (`?` vs `@p1`) per engine
+- Fully parameterized queries — no string-interpolated SQL
+- Fluent `where` and `order` clause builders
+- Struct-tag–driven schema: automatic `CREATE TABLE` and index creation
+- One `Save` for INSERT/UPDATE; soft deletes by default, hard deletes via `Config.Deletable`
+- Transactions — implicit per operation on MySQL/SQL Server, explicit `BeginTransaction` anywhere
+- `context.Context` via `db.WithContext(ctx)` — cancellation and query timeouts
+- Generic helpers (`mud.Fetch[T]`, `mud.First[T]`, `mud.FromID[T]`) and lazy `mud.Range[T]` iteration
+- Lifecycle hooks (`Updater`/`Restorer`) and standing-data seeding
+- Raw SQL escape hatches: `RawExecute`, `RawSelect`, `RawScalar`
+
+## Requirements
+
+Go 1.24 or later.
 
 ## Installation
 
@@ -26,76 +37,77 @@ go get github.com/markoxley/mud
 package main
 
 import (
-    "github.com/markoxley/mud"
-    "github.com/markoxley/mud/where"
+	"context"
+	"log"
+	"time"
+
+	"github.com/markoxley/mud"
+	"github.com/markoxley/mud/order"
+	"github.com/markoxley/mud/where"
 )
 
-// Define your model
+// Models embed mud.Model — giving you ID (UUID), CreateDate,
+// LastUpdate and DeleteDate for free.
 type User struct {
-    mud.Model
-    Username  string `mud:"size:64,key:true"`
-    Email     string `mud:"size:256"`
+	mud.Model
+	Username string `mud:"size:64,key:true"`
+	Email    string `mud:"size:256"`
+	Age      int    `mud:""`
 }
 
 func main() {
-    // Initialize database connection
-    config := mud.Config{
-        Driver:   "mysql",
-        Host:     "localhost",
-        Port:     3306,
-        Database: "mydb",
-        Username: "user",
-        Password: "password",
-    }
+	// SQLite needs no host or credentials — just a file path.
+	db, err := mud.New(&mud.Config{Type: "sqlite", Database: "app.db"})
+	if err != nil {
+		log.Fatal(err)
+	}
+	defer db.Close()
 
-    db, err := mud.Connect(config)
-    if err != nil {
-        panic(err)
-    }
-    defer db.Close()
+	// Save inserts new records and updates existing ones.
+	u := &User{Username: "jdoe", Email: "jdoe@example.com", Age: 33}
+	if err := db.Save(u); err != nil {
+		log.Fatal(err)
+	}
 
-    // Create a new user
-    user := &User{
-        Username: "johndoe",
-        Email:    "john@example.com",
-    }
+	// Type-safe generic reads.
+	adults, err := mud.Fetch[User](db, where.Greater("Age", 18))
+	if err != nil {
+		log.Fatal(err)
+	}
+	first, err := mud.First[User](db, where.Equal("Username", "jdoe"))
+	if err != nil {
+		log.Fatal(err)
+	}
+	byID, err := mud.FromID[User](db, *first.GetID())
+	if err != nil {
+		log.Fatal(err)
+	}
 
-    err = db.Save(user)
-    if err != nil {
-        panic(err)
-    }
+	// Combine WHERE, ORDER BY and LIMIT through Criteria.
+	sorted, err := mud.Fetch[User](db, &mud.Criteria{
+		Where: where.Contains("Email", "@example.com"),
+		Order: order.Desc("Age"),
+		Limit: 10,
+	})
 
-    // Query users with WHERE clause
-    var users []User
-    where := where.Equal("username", "johndoe")
-    err = db.Find(&users, where)
-    if err != nil {
-        panic(err)
-    }
+	// Lazy iteration over large result sets.
+	for usr := range mud.Range[User](db, where.Greater("Age", 65)) {
+		println(usr.Username)
+	}
 
-    // Update user, we reuse the Save method
-    user.Email = "john.doe@example.com"
-    err = db.Save(user)
-    if err != nil {
-        panic(err)
-    }
+	// Cancellation and timeouts via context.
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	if _, err := db.WithContext(ctx).Fetch(User{}); err != nil {
+		log.Fatal(err)
+	}
 
-    // Delete user
-    err = db.Remove(user)
-    if err != nil {
-        panic(err)
-    }
+	// Soft delete by default; hard delete with Config.Deletable = true.
+	if err := db.Remove(u); err != nil {
+		log.Fatal(err)
+	}
 
-    // Convenience functions with generics
-    user, err = mud.First[User](db, where.Equal("username", "johndoe"))
-    if err != nil {
-        panic(err)
-    }
-
-    user, err = mud.FromID[User](db, *user.ID)
-    if err != nil {
-        panic(err)
-    }
+	_, _, _ = adults, byID, sorted
 }
 ```
 
@@ -117,7 +129,7 @@ where.EndsWith("field", "suffix")
 
 // Null checks
 where.IsNull("field")
-where.NotIsNull("field")
+where.IsNotNull("field")
 
 // Range operations
 where.Between("field", value1, value2)
@@ -147,8 +159,32 @@ mud uses struct tags to define model properties:
 
 - `mud:""` - Specify the field is to be included in the database
 - `mud:"key:true"` - Create an index on field
-- `mud:"size:255"` - Set field size
+- `mud:"size:255"` - Set field size (`size:10,2` for decimal precision/scale)
 - `mud:"allowNull"` - Allow NULL values
+- `mud:"unsigned"` - Mark numeric fields unsigned (widened on SQL Server)
+- `mud:"identity:true"` - Mark a field as an identity column
+- `mud:"type:X"` - Override the detected column type (e.g. `text`, `decimal`, `time`)
+
+## Contexts and Timeouts
+
+`WithContext` returns a `*DB` clone bound to a context — every operation
+through it honours cancellation and deadlines, and it can be passed to any
+function that takes a `*DB` (including the generic helpers):
+
+```go
+ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+defer cancel()
+
+users, err := mud.Fetch[User](db.WithContext(ctx))
+```
+
+See [GUIDE.md](GUIDE.md#contexts-and-timeouts) for details.
+
+## Documentation
+
+- [User Guide](GUIDE.md) — models, struct tags, query building, transactions, contexts, raw SQL
+- [API Reference](https://pkg.go.dev/github.com/markoxley/mud) on pkg.go.dev
+- [Changelog](CHANGELOG.md)
 
 ## License
 

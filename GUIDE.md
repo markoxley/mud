@@ -1,6 +1,6 @@
 # Mud User Guide
 
-Mud is a versatile and lightweight ORM (Object-Relational Mapping) package for Go. It supports multiple database backends including PostgreSQL, MySQL, SQLite, and Microsoft SQL Server, providing a fluent interface for database operations.
+Mud is a versatile and lightweight ORM (Object-Relational Mapping) package for Go. It supports **SQLite**, **MySQL/MariaDB** and **Microsoft SQL Server**, providing a fluent interface for database operations.
 
 ## Installation
 
@@ -295,6 +295,33 @@ if err != nil {
 
 db.CommitTransaction(tx)
 ```
+
+### Contexts and Timeouts
+
+Use `WithContext` to bind a `context.Context` — for cancellation or a
+deadline — to all operations performed through the returned clone. The clone
+is a regular `*DB` that shares the parent's connection pool and caches, so it
+can be passed to any function (including the generic helpers) that takes a
+`*DB`. Do not call `Close` on a clone — it shares the parent's pool.
+
+```go
+// Per-request context (e.g. an HTTP handler)
+users, err := mud.Fetch[User](db.WithContext(r.Context()))
+
+// Query timeout
+ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+defer cancel()
+rows, err := db.WithContext(ctx).Fetch(&User{})
+
+// Reusable handle
+cdb := db.WithContext(ctx)
+err = cdb.Save(&user)
+```
+
+The deadline applies to the whole operation, including any transaction Mud
+opens for it (`BeginTx`). A `nil` context is treated as
+`context.Background()`, and the parent `*DB` is unaffected by the clone's
+context.
 
 ### Raw SQL
 
