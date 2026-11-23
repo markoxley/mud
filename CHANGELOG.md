@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+## v0.0.13 - 2026-11-23
+
 This release converts all query generation to parameterized SQL and fixes a
 number of correctness issues. Several changes are **breaking** — review the
 items below before upgrading.
